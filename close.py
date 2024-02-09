@@ -1,34 +1,30 @@
 import sys
-import timeit
 import traceback
+
 sys.path.append("driftpy/src/")
 sys.path.append("drift-sim/")
 
 import pathlib
-from tqdm import tqdm
-import os
+from tqdm import tqdm # type: ignore
 import time
 
 from anchorpy import Provider
-from solana.transaction import (
-    TransactionInstruction,
-    AccountMeta,
-)
+from solana.transaction import AccountMeta
 from solana.rpc import commitment
 from solana.rpc.async_api import AsyncClient
+from solders.signature import Signature # type: ignore
+from solders.instruction import Instruction # type: ignore
+from solders.pubkey import Pubkey # type: ignore
 from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.instructions import get_associated_token_address
 import pprint
 
-from driftsim.backtest.liquidator import Liquidator
-from driftsim.backtest.main import _send_ix
-from driftpy.clearing_house_user import ClearingHouseUser
+
 from driftpy.constants.numeric_constants import (
     QUOTE_PRECISION,
     PRICE_PRECISION,
 )
 from driftpy.constants.config import configs
-from driftpy.clearing_house import ClearingHouse
 from driftpy.accounts import (
     get_perp_market_account,
     get_spot_market_account,
@@ -38,9 +34,12 @@ from driftpy.accounts import (
     get_user_account_public_key,
     get_insurance_fund_stake_public_key,
 )
-from driftpy.types import (
-    SpotMarket,
-)
+from driftpy.types import SpotMarketAccount
+from driftpy.drift_client import DriftClient
+from driftpy.drift_user import DriftUser
+
+from .main import _send_ix # type: ignore
+from .liquidator import Liquidator # type: ignore
 
 from termcolor import colored
 import datetime as dt
@@ -54,9 +53,10 @@ async def view_logs(sig: str, provider: Provider, print: bool = True):
     provider.connection._commitment = commitment.Confirmed
     logs = ""
     try:
-        await provider.connection.confirm_transaction(sig, commitment.Confirmed)
-        tx = await provider.connection.get_transaction(sig)
-        logs = tx["result"]["meta"]["logMessages"]
+        await provider.connection.confirm_transaction(Signature.from_string(sig), commitment.Confirmed)
+        tx = await provider.connection.get_transaction(Signature.from_string(sig))
+        if tx.value:
+            logs = tx.value.transaction.meta.log_messages # type: ignore
     finally:
         provider.connection._commitment = commitment.Processed
 
@@ -76,48 +76,49 @@ def load_subaccounts(chs):
             if str(user_pk) in accounts:
                 subaccount_ids.append(sid)
 
-        ch.subaccounts = subaccount_ids
+        ch.sub_account_ids = subaccount_ids
         if len(subaccount_ids) != 0:
             active_chs.append(ch)
     return active_chs
 
 
-async def get_insurance_fund_balance(connection: AsyncClient, spot_market: SpotMarket):
+async def get_insurance_fund_balance(connection: AsyncClient, spot_market: SpotMarketAccount):
     balance = await connection.get_token_account_balance(
         spot_market.insurance_fund.vault
     )
-    if "error" in balance:
+    if not balance.value:
         raise Exception(balance)
-    return balance["result"]["value"]["uiAmount"]
+    return balance.value.ui_amount
 
 
-async def get_spot_vault_balance(connection: AsyncClient, spot_market: SpotMarket):
+async def get_spot_vault_balance(connection: AsyncClient, spot_market: SpotMarketAccount):
     balance = await connection.get_token_account_balance(spot_market.vault)
-    if "error" in balance:
+    if not balance.value:
         raise Exception(balance)
-    return balance["result"]["value"]["uiAmount"]
+    return balance.value.ui_amount
 
 
 async def clone_close(sim_results: SimulationResultBuilder):
+    spot_market_atas: list[Pubkey] = []
     config = configs["mainnet"]
     url = "http://127.0.0.1:8899"
     connection = AsyncClient(url)
 
     print("loading users...")
     chs, state_ch = await load_local_users(config, connection)
-    provider = state_ch.program.provider
-    program = state_ch.program
+    provider = state_ch.program.provider 
+    program = state_ch.program 
 
-    chs = load_subaccounts(chs)
-    state = await get_state_account(state_ch.program)
+    chs: list[DriftClient] = load_subaccounts(chs) # type: ignore
+    state = await get_state_account(state_ch.program) 
     n_markets, n_spot_markets = state.number_of_markets, state.number_of_spot_markets
 
-    sim_slot = (await connection.get_slot())["result"]
+    sim_slot = (await connection.get_slot()).value
     sim_results.set_start_slot(sim_slot)
 
     n_users = 0
     for ch in chs:
-        for sid in ch.subaccounts:
+        for sid in ch.sub_account_ids:
             n_users += 1
     sim_results.add_total_users(n_users)
 
@@ -144,8 +145,8 @@ async def clone_close(sim_results: SimulationResultBuilder):
         await state_ch.update_withdraw_guard_threshold(i, 2**64 - 1)
 
     print("delisting market...")
-    slot = (await provider.connection.get_slot())["result"]
-    dtime: int = (await provider.connection.get_block_time(slot))["result"]
+    slot = (await provider.connection.get_slot()).value
+    dtime: int = (await provider.connection.get_block_time(slot)).value # type: ignore
 
     # + N seconds
     print("updating perp/spot market expiry...")
@@ -161,11 +162,11 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     # close out lps
     _sigs = []
-    ch: ClearingHouse
+    ch: DriftClient # type: ignore
     for perp_market_idx in range(n_markets):
         for ch in chs:
-            for sid in ch.subaccounts:
-                position = await ch.get_user_position(perp_market_idx, sid)
+            for sid in ch.sub_account_ids:
+                position = ch.get_perp_position(perp_market_idx, sid)
                 if position is not None and position.lp_shares > 0:
                     print(
                         f"removing lp on market {perp_market_idx} "
@@ -181,7 +182,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
     # verify
     if len(_sigs) > 0:
         try:
-            slot = (await provider.connection.get_slot())["result"]
+            slot = (await provider.connection.get_slot()).value
             await connection.confirm_transaction(
                 _sigs[-1],
                 commitment=commitment.Confirmed,
@@ -198,7 +199,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     for i, sig in enumerate(sigs):
         try:
-            slot = (await provider.connection.get_slot())["result"]
+            slot = (await provider.connection.get_slot()).value
             await provider.connection.confirm_transaction(
                 sig,
                 commitment=commitment.Confirmed,
@@ -208,8 +209,8 @@ async def clone_close(sim_results: SimulationResultBuilder):
             traceback.print_exc()
 
     while True:
-        slot = (await provider.connection.get_slot())["result"]
-        new_dtime: int = (await provider.connection.get_block_time(slot))["result"]
+        slot = (await provider.connection.get_slot()).value
+        new_dtime: int = (await provider.connection.get_block_time(slot)).value # type: ignore
         time.sleep(0.2)
         if new_dtime > dtime + seconds_time:
             break
@@ -243,10 +244,10 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     # set init cache
     for i, ch in enumerate(chs):
-        for sid in ch.subaccounts:
-            chu = ClearingHouseUser(ch, subaccount_id=sid, use_cache=False)
-            await chu.set_cache()
-            cache = chu.CACHE
+        for sid in ch.sub_account_ids:
+            chu = DriftUser(ch, get_user_account_public_key(ch.program_id, ch.authority, sid))
+            await chu.account_subscriber.fetch()
+            cache = chu.account_subscriber.get_user_account_and_slot()
             break
         break
 
@@ -256,15 +257,8 @@ async def clone_close(sim_results: SimulationResultBuilder):
     for i, ch in enumerate(chs):
         user_chs[i] = ch
 
-        for sid in ch.subaccounts:
-            chu = ClearingHouseUser(ch, subaccount_id=sid, use_cache=False)
-            account = await chu.get_user()
-
-            # update cache to look at the correct user account
-            cache["user"] = account
-
-            chu.use_cache = True
-            await chu.set_cache(cache)
+        for sid in ch.sub_account_ids:
+            chu = DriftUser(ch, get_user_account_public_key(ch.program_id, ch.authority, sid))
             fc = await chu.get_free_collateral()
 
             ch_idx.append((i, sid))
@@ -300,7 +294,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     print("removing IF stakes...")
 
-    async def remove_if_stake(clearing_house: ClearingHouse, market_index):
+    async def remove_if_stake(clearing_house: DriftClient, market_index):
         spot = await get_spot_market_account(clearing_house.program, market_index)
         total_shares = spot.insurance_fund.total_shares
         if_stake = await get_if_stake_account(
@@ -314,7 +308,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
         )
 
         balance = await conn.get_token_account_balance(vault_pk)
-        v_amount = int(balance["result"]["value"]["amount"])
+        v_amount = int(balance.value.ui_amount) # type: ignore
 
         print(
             f"vault_amount: {v_amount} "
@@ -352,7 +346,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
                 ch.program_id, ch.authority, i
             )
             resp = await ch.program.provider.connection.get_account_info(if_position_pk)
-            if resp["result"]["value"] is None:
+            if resp.value is None:
                 continue
 
             if_account = await get_if_stake_account(ch.program, ch.authority, i)
@@ -367,7 +361,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
                 await ch.send_ixs(ix)
 
                 ata = get_associated_token_address(ch.authority, spot_market.mint)
-                ch.spot_market_atas[i] = ata
+                spot_market_atas[i] = ata
 
                 sig = await remove_if_stake(ch, i)
                 if sig is not None:
@@ -382,7 +376,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
             num_fails = 0
             success = True
             i = 0
-            errors = []
+            errors = [] # type: ignore
             routines = []
             ids = []
 
@@ -402,12 +396,13 @@ async def clone_close(sim_results: SimulationResultBuilder):
                 )
             )
             for user_i, ch in enumerate(chs):
-                for sid in ch.subaccounts:
-                    position = await ch.get_user_position(perp_market_idx, sid)
+                for sid in ch.sub_account_ids:
+                    position = ch.get_perp_position(perp_market_idx, sid)
                     if position is None:
                         i += 1
                         continue
-                    routines.append(ch.settle_pnl(ch.authority, perp_market_idx, sid))
+                    user_account = ch.get_user_account(sid)
+                    routines.append(ch.settle_pnl(ch.authority, user_account, perp_market_idx))
                     ids.append((position, user_i, sid))
 
             for (position, user_i, sid), routine in zip(ids, routines):
@@ -442,31 +437,34 @@ async def clone_close(sim_results: SimulationResultBuilder):
     print("paying back borrows...")
     pbar = tqdm(total=n_users)
     for _, ch in enumerate(chs):
-        for sid in ch.subaccounts:
+        for sid in ch.sub_account_ids:
             sigs = []
             for spot_market_index in range(n_spot_markets):
                 spot_market = await get_spot_market_account(program, spot_market_index)
                 market_name = "".join(map(chr, spot_market.name)).strip(" ")
 
-                position = await ch.get_user_spot_position(spot_market_index, sid)
-                if position is None:
+                spot_position = ch.get_spot_position(spot_market_index, sid)
+                if spot_position is None:
                     continue
 
-                if spot_market_index not in ch.spot_market_atas:
+                spot_markets = ch.get_spot_market_accounts()
+                market_indexes = [market.market_index for market in spot_markets]
+
+                if spot_market_index not in market_indexes:
                     ix = create_associated_token_account(
                         ch.authority, ch.authority, spot_market.mint
                     )
                     await ch.send_ixs(ix)
                     ata = get_associated_token_address(ch.authority, spot_market.mint)
-                    ch.spot_market_atas[spot_market_index] = ata
+                    spot_market_atas[spot_market_index] = ata
 
-                if str(position.balance_type) != "SpotBalanceType.Borrow()":
+                if str(spot_position.balance_type) != "SpotBalanceType.Borrow()":
                     continue
 
                 # print(f'paying back borrow for spot {spot_market.market_index}...')
                 # mint to
                 token_amount = get_token_amount(
-                    position.scaled_balance, spot_market, position.balance_type
+                    spot_position.scaled_balance, spot_market, spot_position.balance_type
                 )
 
                 token_units = 10**spot_market.decimals
@@ -479,39 +477,39 @@ async def clone_close(sim_results: SimulationResultBuilder):
                 )
 
                 if spot_market_index == 0:
-                    mint_tx = mint_ix(
+                    ix: Instruction = mint_ix(  # type: ignore
                         spot_market.mint,
                         state_ch.authority,
                         token_amount,
-                        ch.spot_market_atas[spot_market_index],
+                        spot_market_atas[spot_market_index],
                     )
-                    await state_ch.send_ixs(mint_tx)
+                    await state_ch.send_ixs(ix)
 
                 else:
                     b = await connection.get_balance(
-                        ch.spot_market_atas[spot_market_index]
+                        spot_market_atas[spot_market_index]
                     )
-                    if b["result"]["value"] < token_amount:
+                    if b.value < token_amount:
                         sig = (
                             await connection.request_airdrop(
-                                ch.spot_market_atas[spot_market_index], token_amount
+                                spot_market_atas[spot_market_index], token_amount
                             )
-                        )["result"]
+                        ).value
                         await connection.confirm_transaction(sig)
 
                     # sync native ix
                     # https://github.dev/solana-labs/solana-program-library/token/js/src/ix/types.ts
                     keys = [
                         AccountMeta(
-                            pubkey=ch.spot_market_atas[spot_market_index],
+                            pubkey=spot_market_atas[spot_market_index],
                             is_signer=False,
                             is_writable=True,
                         )
                     ]
                     data = int.to_bytes(17, 1, "little")
                     program_id = TOKEN_PROGRAM_ID
-                    ix = TransactionInstruction(
-                        keys=keys, program_id=program_id, data=data
+                    ix = Instruction(
+                        accounts=keys, program_id=program_id, data=data
                     )
                     await ch.send_ixs(ix)
 
@@ -519,8 +517,8 @@ async def clone_close(sim_results: SimulationResultBuilder):
                 sig = await ch.deposit(
                     int(1e19),
                     spot_market_index,
-                    ch.spot_market_atas[spot_market_index],
-                    user_id=sid,
+                    spot_market_atas[spot_market_index],
+                    sub_account_id=sid,
                     reduce_only=True,
                 )
                 sigs.append(sig)
@@ -536,7 +534,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
     for spot_market_index in range(n_spot_markets):
         spot_market = await get_spot_market_account(program, spot_market_index)
         attempt = -1
-        ch: ClearingHouse
+        ch: DriftClient # type: ignore
         success = False
         while not success and attempt < 0:  # only try once for rn
             attempt += 1
@@ -550,9 +548,9 @@ async def clone_close(sim_results: SimulationResultBuilder):
             )
 
             for _, ch in enumerate(chs):
-                for sid in ch.subaccounts:
-                    position = await ch.get_user_spot_position(spot_market_index, sid)
-                    if position is None:
+                for sid in ch.sub_account_ids:
+                    spot_position = ch.get_spot_position(spot_market_index, sid)
+                    if spot_position is None:
                         user_withdraw_count += 1
                         continue
 
@@ -561,7 +559,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
                     )
                     token_amount = int(
                         get_token_amount(
-                            position.scaled_balance, spot_market, position.balance_type
+                            spot_position.scaled_balance, spot_market, spot_position.balance_type # type: ignore
                         )
                     )
                     print("token amount", token_amount)
@@ -570,9 +568,9 @@ async def clone_close(sim_results: SimulationResultBuilder):
                     ix = await ch.get_withdraw_collateral_ix(
                         int(1e19),
                         spot_market_index,
-                        ch.spot_market_atas[spot_market_index],
+                        spot_market_atas[spot_market_index],
                         True,
-                        user_id=sid,
+                        sub_account_id=sid,
                     )
                     (failed, sig, _) = await _send_ix(ch, ix, "withdraw", {})
 
@@ -601,17 +599,17 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     n_spot, n_perp = 0, 0
     for ch in chs:
-        for sid in ch.subaccounts:
+        for sid in ch.sub_account_ids:
             for i in range(n_markets):
-                position = await ch.get_user_position(i, sid)
-                if position is None:
+                perp_position = ch.get_perp_position(i, sid)
+                if perp_position is None:
                     continue
                 n_perp += 1
                 # print(position)
 
             for i in range(n_spot_markets):
-                position = await ch.get_user_spot_position(i, sid)
-                if position is None:
+                spot_position = ch.get_spot_position(i, sid)
+                if spot_position is None:
                     continue
                 n_spot += 1
                 # print(position)

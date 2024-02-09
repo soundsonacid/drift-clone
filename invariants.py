@@ -5,50 +5,33 @@ sys.path.append('driftpy/src/')
 import driftpy
 print(driftpy.__path__)
 
-from driftpy.types import User
-from driftpy.constants.config import configs
+from driftpy.types import UserAccount
+from driftpy.constants.config import configs, Config
 from anchorpy import Provider
-import json 
 from anchorpy import Wallet
 from solana.rpc.async_api import AsyncClient
-from driftpy.clearing_house import ClearingHouse
 from driftpy.accounts import *
-from solana.publickey import PublicKey
-from solana.keypair import Keypair
-import pathlib 
-from tqdm.notebook import tqdm 
-import shutil
-from anchorpy import Instruction
-import base64
-from subprocess import Popen
+from solders.keypair import Keypair
 import os 
-import time
-import signal
-from driftpy.admin import Admin
 from helpers import *
-from tqdm.notebook import tqdm 
+from driftpy.math.perp_position import is_available
 
-from driftpy.clearing_house import is_available
-
-async def validate_market_metrics(program, config):
+async def validate_market_metrics(program: Program, config: Config):
     user_accounts = await program.account["User"].all()
-    n_markets = len(config.markets)
+    n_markets = len(config.perp_markets)
 
     for market_index in range(n_markets):
         market = await get_perp_market_account(
             program, 
             market_index
         )
-        market_total_baa = market.amm.net_base_asset_amount + market.amm.net_unsettled_lp_base_asset_amount 
+        market_total_baa = market.amm.base_asset_reserve + market.amm.base_asset_amount_with_unsettled_lp 
 
         lp_shares = 0
         user_total_baa = 0 
         for user in user_accounts:
-            user: User = user.account
-            position: list[PerpPosition] = [p for p in user.perp_positions if p.market_index == market_index and not is_available(p)]
-            if len(position) == 0: continue
-            assert len(position) == 1
-            position = position[0]
+            user: UserAccount = user.account # type: ignore
+            position: PerpPosition = [p for p in user.perp_positions if p.market_index == market_index and not is_available(p)] # type: ignore
             
             user_total_baa += position.base_asset_amount
             lp_shares += position.lp_shares
@@ -72,7 +55,11 @@ async def main():
     kp = Keypair()
     wallet = Wallet(kp)
     provider = Provider(connection, wallet)
-    ch = ClearingHouse.from_config(config, provider)
+    ch = DriftClient(
+        connection,
+        wallet,
+        "mainnet"
+    )
 
     print('validating...')
     await validate_market_metrics(ch.program, config)

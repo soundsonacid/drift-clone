@@ -1,8 +1,9 @@
+from typing import Optional, Tuple
 from anchorpy import Provider
 from anchorpy import Wallet
 from solana.rpc.async_api import AsyncClient
-from driftpy.clearing_house import ClearingHouse
-from solana.keypair import Keypair
+from driftpy.drift_client import DriftClient
+from solders.keypair import Keypair # type: ignore
 import pathlib
 from subprocess import Popen
 import os
@@ -35,36 +36,43 @@ class LocalValidator:
 
 
 async def load_local_users(
-    config,
+    _,
     connection: AsyncClient,
     keypairs_path='keypairs/',
-):
+) -> Tuple[list[DriftClient], Admin]:
     admin_ch = None
     chs = []
     sigs = []
     for p in pathlib.Path(keypairs_path).iterdir():
         with open(p, 'r') as f:
             s = f.read()
-        kp = Keypair().from_secret_key(bytearray.fromhex(s))
+            kp = Keypair.from_bytes(bytes.fromhex(s))
 
         sig = (await connection.request_airdrop(
-            kp.public_key,
+            kp.pubkey(),
             int(100 * 1e9)
-        ))['result']
+        )).value
         sigs.append(sig)
 
         # save clearing house
         wallet = Wallet(kp)
-        provider = Provider(connection, wallet)
 
         if p.name == 'state.secret':
             print('found admin...')
-            admin_ch = Admin.from_config(config, provider)
+            admin_ch = Admin(
+                connection,
+                wallet,
+                "mainnet"
+            )
         else:
-            ch = ClearingHouse.from_config(config, provider)
+            ch = DriftClient(
+                connection,
+                wallet,
+                "mainnet"
+            )
             chs.append(ch)
 
     print('confirming SOL airdrops...')
     await connection.confirm_transaction(sigs[-1])
 
-    return chs, admin_ch
+    return chs, admin_ch # type: ignore
