@@ -93,11 +93,9 @@ async def load_subaccounts_for_ch(ch, accounts, executor, i) -> None:
         if str(user_pk) in accounts:
             subaccount_ids.append(sid)
 
-    # Prepare and run tasks for checking each subaccount
     tasks = [check_subaccount(sid) for sid in range(10)]
     await asyncio.gather(*tasks)
 
-    # Update ch if it has any active subaccounts
     if subaccount_ids:
         for id in subaccount_ids:
             await ch.add_user(id)
@@ -107,16 +105,14 @@ async def load_subaccounts_for_ch(ch, accounts, executor, i) -> None:
 
 async def load_subaccounts(chs: list[DriftClient]) -> list[DriftClient]:
     accounts_dir = pathlib.Path("accounts")
-    accounts = [p.stem for p in accounts_dir.iterdir() if p.is_file()]  # Ensure we're only dealing with files
+    accounts = [p.stem for p in accounts_dir.iterdir() if p.is_file()]  
     active_chs = []
 
-    # Use ThreadPoolExecutor for running synchronous I/O operations in parallel
     with ThreadPoolExecutor() as executor:
         # Create coroutine for each ch
         coroutines = [load_subaccounts_for_ch(ch, accounts, executor, i) for i, ch in enumerate(chs)]
         results = await asyncio.gather(*coroutines)
 
-    # Filter out None results and collect active chs
     active_chs = [ch for ch in results if ch is not None]
 
     return active_chs

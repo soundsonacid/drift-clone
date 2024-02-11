@@ -86,18 +86,16 @@ async def load_local_users(
     print(f"Loaded {len(chs) + 1} users.          ")
 
     print('Confirming SOL airdrops...')
-    confirmed_count = 0  # Initialize a counter for successfully confirmed airdrops
+    confirmed_count = 0  
 
     for i, sig in enumerate(sigs):
         command = ["solana", "confirm", f"{sig}"]
         output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
         if "0x1" not in output:
-            confirmed_count += 1  # Increment only on successful confirmation
+            confirmed_count += 1  
 
-        # Update the message in place for each iteration
         print(f"Confirming airdrops: {confirmed_count}/{len(sigs)} confirmed", end='\r')
 
-    # Ensure to print the final message on a new line after all confirmations are checked
     print(f"\nConfirmed {confirmed_count}/{len(sigs)} airdrops successfully.")
 
 
