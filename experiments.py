@@ -1,17 +1,28 @@
 import asyncio
 import pathlib
-
+import subprocess
 import datetime as dt
 
+from dataclasses import dataclass
+
 from solana.rpc.async_api import AsyncClient
+from solders.keypair import Keypair # type: ignore
+
+from anchorpy import Wallet
 
 from driftpy.accounts import get_user_account_public_key
+from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.drift_client import DriftClient
-from driftpy.admin import Admin
+from driftpy.drift_user import DriftUser
 
 from slack import SimulationResultBuilder, Slack
 from helpers import load_local_users
-from actions import Action, get_action
+from actions import get_action
+
+@dataclass
+class Tester:
+    drift_client: DriftClient
+    drift_user: DriftUser
 
 async def load_subaccounts(chs):
     accounts = [p.stem for p in pathlib.Path("accounts").iterdir()]
@@ -35,6 +46,7 @@ class Simulator:
         self.admin = None
         self.agents: list[DriftClient] = []
         self.connection = AsyncClient("http://127.0.0.1:8899")
+        self.tester = None
         self.sim_results = sim_results
 
     async def setup(self):
@@ -60,6 +72,43 @@ class Simulator:
         for _ in range(num_actions):
             await self.generate_and_execute_action()
 
+    async def create_tester(self):
+        print("initializing tester")
+        tester_kp = Keypair() # random new keypair
+        wallet = Wallet(tester_kp)
+
+        print(f"requesting airdrop for tester pubkey: {tester_kp.pubkey()}")
+        sig = (await self.connection.request_airdrop(tester_kp.pubkey(), int(10 * 1e9))).value
+        await asyncio.sleep(3) # give the airdrop a second
+
+        command = ["solana", "confirm", f"{sig}"]
+        output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+        print(f"airdrop status: {output}")
+
+        drift_client = DriftClient(
+            self.connection,
+            wallet,
+            "mainnet",
+            account_subscription=AccountSubscriptionConfig("websocket")
+        )
+
+        sig = (await drift_client.initialize_user())
+        await asyncio.sleep(3)
+
+        command = ["solana", "confirm", f"{sig}"]
+        output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+        print(f"initialize user status: {output}")
+
+        await drift_client.add_user(0)
+        await drift_client.subscribe()
+
+        drift_user = drift_client.get_user()
+        await drift_user.subscribe()
+
+        self.tester = Tester(drift_client, drift_user)
+
+        print(f"initialized tester")
+
 async def main():
     print("spinning up drift simulation..")
     slack = Slack()
@@ -71,6 +120,8 @@ async def main():
     await simulator.setup()
 
     await simulator.experiment(10)
+
+    await simulator.create_tester()
 
 if __name__ == "__main__":
     import asyncio
