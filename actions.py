@@ -1,8 +1,12 @@
 from solders.pubkey import Pubkey # type: ignore
 from dataclasses import dataclass
 from driftpy.admin import Admin
+from driftpy.drift_client import DEFAULT_TX_OPTIONS
 from typing import List, Type
 import random
+from pathlib import Path
+from anchorpy import Program, Idl, Provider
+from driftpy.setup.helpers import set_price_feed
 
 @dataclass
 class Action:
@@ -63,8 +67,21 @@ class UpdateOracleAction(Action):
     async def execute(self, admin: Admin):  
         price = admin.get_oracle_price_data_for_perp_market(self.market_index).price # type: ignore
         print(f"updating oracle for market: {self.market_index} old price: {price} new price: {self.oracle_price}")
-        # TODO
-        pass
+        file_path = Path("pyth.json")
+        raw = file_path.read_text()
+        idl = Idl.from_json(raw)
+        provider = Provider(admin.connection, admin.wallet, DEFAULT_TX_OPTIONS)
+        program = Program(
+            idl,
+            Pubkey.from_string("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH"),
+            provider
+        )
+        try:
+            sig = await set_price_feed(program, self.oracle, self.oracle_price)
+            print(f"updated oracle price for {self.market_index}: {sig}")
+        except Exception as e:
+            print(f"failed to update oracle price for {self.market_index}")
+            print(e)
 
 def get_action(admin: Admin) -> Action:
     action_classes: List[Type[Action]] = [UpdateCurveAction, UpdateKAction, UpdateImfAction, UpdateOracleAction]
