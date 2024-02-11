@@ -6,7 +6,9 @@ from typing import List, Type
 import random
 from pathlib import Path
 from anchorpy import Program, Idl, Provider
-from driftpy.setup.helpers import set_price_feed
+from driftpy.setup.helpers import set_price_feed, get_feed_data
+from solana.rpc.core import RPCException
+import re
 
 @dataclass
 class Action:
@@ -25,9 +27,9 @@ class UpdateCurveAction(Action):
         try:
             sig = (await admin.repeg_curve(self.new_peg_candidate, self.market_index)).tx_sig
             print(f"updated peg for {self.market_index}: {sig}")
-        except Exception as e:
+        except RPCException as e:
             print(f"failed to update peg for {self.market_index}")
-            print(e)
+            print(f"error message: {extract_error(e.args[0])}") # type: ignore
 
 @dataclass
 class UpdateKAction(Action):
@@ -39,9 +41,9 @@ class UpdateKAction(Action):
         try:
             sig = (await admin.update_k(self.sqrt_k, self.market_index)).tx_sig
             print(f"updated sqrt_k for {self.market_index}: {sig}")
-        except Exception as e:
+        except RPCException as e:
             print(f"failed to update sqrt_k for {self.market_index}")
-            print(e)
+            print(f"error message: {extract_error(e.args[0])}") # type: ignore
 
 @dataclass
 class UpdateImfAction(Action):
@@ -54,10 +56,9 @@ class UpdateImfAction(Action):
         try:
             sig = await admin.update_perp_market_imf_factor(self.market_index, self.imf_factor, self.upnl_imf_factor) # type: ignore
             print(f"updated imf factors for {self.market_index}: {sig}")
-        except Exception as e:
+        except RPCException as e:
             print(f"failed to update imf factors for {self.market_index}")
-            print(e)
-        pass
+            print(f"error message: {extract_error(e.args[0])}") # type: ignore
 
 @dataclass
 class UpdateOracleAction(Action):
@@ -76,12 +77,15 @@ class UpdateOracleAction(Action):
             Pubkey.from_string("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH"),
             provider
         )
+        data = await get_feed_data(program, self.oracle)
+        exp = data.exponent
         try:
-            sig = await set_price_feed(program, self.oracle, self.oracle_price)
+            price_normalized = (self.oracle_price) // (10 ** (exp * -1))
+            sig = await set_price_feed(program, self.oracle, price_normalized)
             print(f"updated oracle price for {self.market_index}: {sig}")
-        except Exception as e:
+        except RPCException as e:
             print(f"failed to update oracle price for {self.market_index}")
-            print(e)
+            print(f"error message: {extract_error(e.args[0])}") # type: ignore
 
 def get_action(admin: Admin) -> Action:
     action_classes: List[Type[Action]] = [UpdateCurveAction, UpdateKAction, UpdateImfAction, UpdateOracleAction]
@@ -114,3 +118,15 @@ def get_action(admin: Admin) -> Action:
         price_delta = int(price * pct_delta)
         new_price = price + price_delta
         return UpdateOracleAction(market_index=market_index, oracle=oracle, oracle_price=new_price)
+    
+def extract_error(logs):
+    # Define the pattern to search for error messages
+    error_pattern = re.compile(r"Error Message: (.+)")
+    for log in logs.data.logs:
+        match = error_pattern.search(log)
+        if match:
+            # If a match is found, return the error message
+            return match.group(1)
+    
+    # Return None if no error message is found in any of the logs
+    return None
