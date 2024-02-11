@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 import sys
+import subprocess
 import traceback
 
 sys.path.append("driftpy/src/")
@@ -19,7 +21,6 @@ from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.instructions import get_associated_token_address
 import pprint
 
-
 from driftpy.constants.numeric_constants import (
     QUOTE_PRECISION,
     PRICE_PRECISION,
@@ -37,9 +38,9 @@ from driftpy.accounts import (
 from driftpy.types import SpotMarketAccount
 from driftpy.drift_client import DriftClient
 from driftpy.drift_user import DriftUser
-
-from .main import _send_ix # type: ignore
-from .liquidator import Liquidator # type: ignore
+from driftpy.decode.utils import decode_name
+from main import _send_ix # type: ignore
+from liquidator import Liquidator # type: ignore
 
 from termcolor import colored
 import datetime as dt
@@ -66,35 +67,75 @@ async def view_logs(sig: str, provider: Provider, print: bool = True):
     return logs
 
 
-def load_subaccounts(chs):
-    accounts = [p.stem for p in pathlib.Path("accounts").iterdir()]
-    active_chs = []
-    for ch in chs:
-        subaccount_ids = []
-        for sid in range(10):
-            user_pk = get_user_account_public_key(ch.program_id, ch.authority, sid)
-            if str(user_pk) in accounts:
-                subaccount_ids.append(sid)
+# def load_subaccounts(chs):
+#     accounts = [p.stem for p in pathlib.Path("accounts").iterdir()]
+#     active_chs = []
+#     for ch in chs:
+#         subaccount_ids = []
+#         for sid in range(10):
+#             user_pk = get_user_account_public_key(ch.program_id, ch.authority, sid)
+#             if str(user_pk) in accounts:
+#                 subaccount_ids.append(sid)
 
-        ch.sub_account_ids = subaccount_ids
-        if len(subaccount_ids) != 0:
-            active_chs.append(ch)
+#         ch.sub_account_ids = subaccount_ids
+#         if len(subaccount_ids) != 0:
+#             active_chs.append(ch)
+#     return active_chs
+
+async def load_subaccounts_for_ch(ch, accounts, executor, i) -> None:
+    print(f"loading subaccounts for account: {i}")
+    loop = asyncio.get_running_loop()
+    subaccount_ids = []
+
+    async def check_subaccount(sid):
+        # Run the synchronous function in the thread pool
+        user_pk = await loop.run_in_executor(executor, get_user_account_public_key, ch.program_id, ch.authority, sid)
+        if str(user_pk) in accounts:
+            subaccount_ids.append(sid)
+
+    # Prepare and run tasks for checking each subaccount
+    tasks = [check_subaccount(sid) for sid in range(10)]
+    await asyncio.gather(*tasks)
+
+    # Update ch if it has any active subaccounts
+    if subaccount_ids:
+        for id in subaccount_ids:
+            await ch.add_user(id)
+        print(f"subacccount ids for {i}: {ch.sub_account_ids}")
+        return ch
+    return None
+
+async def load_subaccounts(chs: list[DriftClient]) -> list[DriftClient]:
+    accounts_dir = pathlib.Path("accounts")
+    accounts = [p.stem for p in accounts_dir.iterdir() if p.is_file()]  # Ensure we're only dealing with files
+    active_chs = []
+
+    # Use ThreadPoolExecutor for running synchronous I/O operations in parallel
+    with ThreadPoolExecutor() as executor:
+        # Create coroutine for each ch
+        coroutines = [load_subaccounts_for_ch(ch, accounts, executor, i) for i, ch in enumerate(chs)]
+        results = await asyncio.gather(*coroutines)
+
+    # Filter out None results and collect active chs
+    active_chs = [ch for ch in results if ch is not None]
+
     return active_chs
 
-
 async def get_insurance_fund_balance(connection: AsyncClient, spot_market: SpotMarketAccount):
+    print(spot_market.insurance_fund.vault)
     balance = await connection.get_token_account_balance(
         spot_market.insurance_fund.vault
     )
-    if not balance.value:
-        raise Exception(balance)
+    if not hasattr(balance, 'value'):
+        return
     return balance.value.ui_amount
 
 
 async def get_spot_vault_balance(connection: AsyncClient, spot_market: SpotMarketAccount):
+    print(spot_market.vault)
     balance = await connection.get_token_account_balance(spot_market.vault)
-    if not balance.value:
-        raise Exception(balance)
+    if not hasattr(balance, 'value'):
+        return
     return balance.value.ui_amount
 
 
@@ -105,11 +146,12 @@ async def clone_close(sim_results: SimulationResultBuilder):
     connection = AsyncClient(url)
 
     print("loading users...")
-    chs, state_ch = await load_local_users(config, connection)
+    chs_1, state_ch = await load_local_users(config, connection)
     provider = state_ch.program.provider 
     program = state_ch.program 
 
-    chs: list[DriftClient] = load_subaccounts(chs) # type: ignore
+    chs: list[DriftClient] = await load_subaccounts(chs_1) # type: ignore
+    print(f"state subs: {state_ch.sub_account_ids}")
     state = await get_state_account(state_ch.program) 
     n_markets, n_spot_markets = state.number_of_markets, state.number_of_spot_markets
 
@@ -128,6 +170,7 @@ async def clone_close(sim_results: SimulationResultBuilder):
         sim_results.add_initial_perp_market(perp_market)
     for i in range(n_spot_markets):
         spot_market = await get_spot_market_account(program, i)
+        print(f"spot market: {decode_name(spot_market.name)}")
         insurance_fund_balance = await get_insurance_fund_balance(
             connection, spot_market
         )
@@ -180,16 +223,19 @@ async def clone_close(sim_results: SimulationResultBuilder):
                     _sigs.append(sig)
 
     # verify
+    print(len(_sigs))
     if len(_sigs) > 0:
         try:
-            slot = (await provider.connection.get_slot()).value
-            await connection.confirm_transaction(
-                _sigs[-1],
-                commitment=commitment.Confirmed,
-                last_valid_block_height=slot+10)
+            for sig in _sigs:
+                command = ["solana", "confirm", f"{sig}"] # do it manually because confirm transaction lies
+                output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+                if "Confirmed" in output or "Processed" in output or "Finalized" in output:
+                    print(f"confirmed remove liq transasction: {sig}")
+                else:
+                    print(f"failed to confirm remove liq transaction: {output}")
         except Exception as e:
             print(f"error confirming remove_liquidity error: {e}")
-            traceback.print_exc()
+            # traceback.print_exc()
 
     perp_market = await get_perp_market_account(state_ch.program, perp_market_idx)
     print("market.amm.user_lp_shares == 0: ", perp_market.amm.user_lp_shares == 0)
@@ -199,11 +245,14 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     for i, sig in enumerate(sigs):
         try:
-            slot = (await provider.connection.get_slot()).value
-            await provider.connection.confirm_transaction(
-                sig,
-                commitment=commitment.Confirmed,
-                last_valid_block_height=slot+10)
+            for sig in sigs:
+                command = ["solana", "confirm", f"{sig}"] # do it manually because confirm transaction lies
+                output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+                if "Confirmed" in output or "Processed" in output or "Finalized" in output:
+                    pass
+                    # print(f"confirmed update transaction: {sig}")
+                else:
+                    print(f"failed to confirm update transaction: {output}")                
         except Exception as e:
             print(f"error confirming update_[perp|spot]_market txs: {e}")
             traceback.print_exc()
@@ -217,6 +266,9 @@ async def clone_close(sim_results: SimulationResultBuilder):
 
     print("settling expired market")
     for i in range(n_markets):
+        print(f"market.amm.base_asset_amount_with_unsettled_lp: {state_ch.get_perp_market_account(i).amm.base_asset_amount_with_unsettled_lp}") # type: ignore
+        print(f"market.amm.user_lp_shares: {state_ch.get_perp_market_account(i).amm.user_lp_shares}") # type: ignore
+
         sig = await state_ch.settle_expired_market(i)
         await provider.connection.confirm_transaction(sig, commitment.Finalized)
 
@@ -651,16 +703,16 @@ async def main():
     # os.system(f"cat {script_file}")
     print()
 
-    print("starting validator")
-    validator = LocalValidator(script_file)
-    validator.start()
-    print("validator started")
-    time.sleep(8)
+    # print("starting validator")
+    # validator = LocalValidator(script_file)
+    # validator.start()
+    # print("validator started")
+    # time.sleep(30)
 
-    try:
-        await clone_close(sim_results)
-    finally:
-        validator.stop()
+    # try:
+    await clone_close(sim_results)
+    # finally:
+    #     validator.stop()
 
 
 if __name__ == "__main__":

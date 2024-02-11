@@ -1,8 +1,8 @@
-from typing import Optional, Tuple
-from anchorpy import Provider
+from typing import Tuple
 from anchorpy import Wallet
 from solana.rpc.async_api import AsyncClient
 from driftpy.drift_client import DriftClient
+from driftpy.account_subscription_config import AccountSubscriptionConfig
 from solders.keypair import Keypair # type: ignore
 import pathlib
 from subprocess import Popen
@@ -10,7 +10,7 @@ import os
 import time
 import signal
 from driftpy.admin import Admin
-
+import subprocess
 
 class LocalValidator:
     def __init__(self, script_file) -> None:
@@ -39,40 +39,66 @@ async def load_local_users(
     _,
     connection: AsyncClient,
     keypairs_path='keypairs/',
+    num_users: int = 10
 ) -> Tuple[list[DriftClient], Admin]:
     admin_ch = None
     chs = []
     sigs = []
-    for p in pathlib.Path(keypairs_path).iterdir():
+    paths = sorted(pathlib.Path(keypairs_path).iterdir(), key=lambda p: p.name)
+
+    for i, p in enumerate(paths):
+        print(f"Loading user {i}/{num_users}", end='\r')
+        if i == num_users:
+            break
         with open(p, 'r') as f:
             s = f.read()
-            kp = Keypair.from_bytes(bytes.fromhex(s))
+            kp = Keypair.from_seed(bytes.fromhex(s))
 
         sig = (await connection.request_airdrop(
             kp.pubkey(),
-            int(100 * 1e9)
+            int(1 * 1e9)
         )).value
         sigs.append(sig)
 
         # save clearing house
         wallet = Wallet(kp)
-
-        if p.name == 'state.secret':
-            print('found admin...')
+        
+        if p.name == '1.secret':
             admin_ch = Admin(
                 connection,
                 wallet,
-                "mainnet"
+                "mainnet",
+                account_subscription=AccountSubscriptionConfig("cached")
             )
         else:
             ch = DriftClient(
                 connection,
                 wallet,
-                "mainnet"
+                "mainnet",
+                account_subscription=AccountSubscriptionConfig("cached")
             )
             chs.append(ch)
 
-    print('confirming SOL airdrops...')
-    await connection.confirm_transaction(sigs[-1])
+    await admin_ch.subscribe() # type: ignore
+    for ch in chs: 
+        await ch.subscribe()
+
+    print(f"Loaded {len(chs) + 1} users.          ")
+
+    print('Confirming SOL airdrops...')
+    confirmed_count = 0  # Initialize a counter for successfully confirmed airdrops
+
+    for i, sig in enumerate(sigs):
+        command = ["solana", "confirm", f"{sig}"]
+        output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+        if "0x1" not in output:
+            confirmed_count += 1  # Increment only on successful confirmation
+
+        # Update the message in place for each iteration
+        print(f"Confirming airdrops: {confirmed_count}/{len(sigs)} confirmed", end='\r')
+
+    # Ensure to print the final message on a new line after all confirmations are checked
+    print(f"\nConfirmed {confirmed_count}/{len(sigs)} airdrops successfully.")
+
 
     return chs, admin_ch # type: ignore
