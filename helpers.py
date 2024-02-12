@@ -68,7 +68,7 @@ async def load_local_users(
                 connection,
                 wallet,
                 "mainnet",
-                account_subscription=AccountSubscriptionConfig("cached")
+                account_subscription=AccountSubscriptionConfig("websocket")
             )
         else:
             ch = DriftClient(

@@ -13,6 +13,7 @@ from solders.pubkey import Pubkey # type: ignore
 from driftpy.admin import Admin
 from driftpy.drift_client import DEFAULT_TX_OPTIONS
 from driftpy.setup.helpers import set_price_feed, get_feed_data
+from driftpy.constants.numeric_constants import PRICE_PRECISION
 
 @dataclass
 class Action:
@@ -72,20 +73,8 @@ class UpdateOracleAction(Action):
     async def execute(self, admin: Admin):  
         price = admin.get_oracle_price_data_for_perp_market(self.market_index).price # type: ignore
         print(f"updating oracle for market: {self.market_index} old price: {price} new price: {self.oracle_price}")
-        file_path = Path("pyth.json")
-        raw = file_path.read_text()
-        idl = Idl.from_json(raw)
-        provider = Provider(admin.connection, admin.wallet, DEFAULT_TX_OPTIONS)
-        program = Program(
-            idl,
-            Pubkey.from_string("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH"),
-            provider
-        )
-        data = await get_feed_data(program, self.oracle)
-        exp = data.exponent
         try:
-            price_normalized = (self.oracle_price) // (10 ** (exp * -1))
-            sig = await set_price_feed(program, self.oracle, price_normalized)
+            sig = await set_oracle_price(admin, self.oracle, self.oracle_price)
             print(f"updated oracle price for {self.market_index}: {sig}")
         except RPCException as e:
             print(f"failed to update oracle price for {self.market_index}")
@@ -134,3 +123,33 @@ def extract_error(logs):
     
     # Return None if no error message is found in any of the logs
     return None
+
+async def set_oracle_price(admin: Admin, oracle: Pubkey, price: int):
+    file_path = Path("pyth.json")
+    raw = file_path.read_text()
+    idl = Idl.from_json(raw)
+    provider = Provider(admin.connection, admin.wallet, DEFAULT_TX_OPTIONS)
+    program = Program(
+        idl,
+        Pubkey.from_string("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH"),
+        provider
+    )
+    # markets = admin.get_perp_market_accounts()
+    # for market in markets:
+    #     data = await get_feed_data(program, market.amm.oracle)
+    #     price = admin.get_oracle_price_data_for_perp_market(market.market_index).price
+    #     print(f"price: {price}")
+    #     print(f"price precision price: {price / PRICE_PRECISION}")
+    #     print(f"exponent price: {price * (10 ** data.exponent)}")
+    #     print(f"price feed data: {data}")
+    data = await get_feed_data(program, oracle)
+    print(data)
+    exp = data.exponent
+    # price_normalized = price * (10 ** exp)
+    price_normalized = price / PRICE_PRECISION
+    print(price)
+    # print(10 ** exp)
+    # print(price * (10 ** exp))
+    print(f"setting price (normalized) {price_normalized}")
+    sig = await set_price_feed(program, oracle, price_normalized)
+    return sig

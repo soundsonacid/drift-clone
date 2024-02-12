@@ -18,6 +18,7 @@ from driftpy.drift_user import DriftUser
 from slack import SimulationResultBuilder, Slack
 from helpers import load_local_users
 from actions import get_action
+from scenarios import oracle_jump
 
 @dataclass
 class Tester:
@@ -109,6 +110,10 @@ class Simulator:
 
         print(f"initialized tester")
 
+    async def test_exchange_behavior(self):
+        # TODO
+        pass
+
 async def main():
     print("spinning up drift simulation..")
     slack = Slack()
@@ -119,9 +124,20 @@ async def main():
 
     await simulator.setup()
 
-    await simulator.experiment(10)
+    await oracle_jump(simulator.admin, 5, 0, None, 0.01)
 
-    await simulator.create_tester()
+    await asyncio.sleep(3)
+
+    opd = simulator.admin.get_oracle_price_data_for_perp_market(0).price # type: ignore
+    print(opd)
+
+    # while True:
+    #     await asyncio.sleep(3_500)
+    # await simulator.experiment(10)
+
+    # await simulator.create_tester()
+
+    # await simulator.test_exchange_behavior()
 
 if __name__ == "__main__":
     import asyncio
