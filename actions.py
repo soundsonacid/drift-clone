@@ -12,7 +12,7 @@ from solders.pubkey import Pubkey # type: ignore
 
 from driftpy.admin import Admin
 from driftpy.drift_client import DEFAULT_TX_OPTIONS
-from driftpy.setup.helpers import set_price_feed, get_feed_data
+from driftpy.setup.helpers import set_price_feed
 from driftpy.constants.numeric_constants import PRICE_PRECISION
 
 @dataclass
@@ -113,15 +113,12 @@ def get_action(admin: Admin) -> Action:
         return UpdateOracleAction(market_index=market_index, oracle=oracle, oracle_price=new_price)
     
 def extract_error(logs):
-    # Define the pattern to search for error messages
     error_pattern = re.compile(r"Error Message: (.+)")
     for log in logs.data.logs:
         match = error_pattern.search(log)
         if match:
-            # If a match is found, return the error message
             return match.group(1)
     
-    # Return None if no error message is found in any of the logs
     return None
 
 async def set_oracle_price(admin: Admin, oracle: Pubkey, price: int):
@@ -134,22 +131,7 @@ async def set_oracle_price(admin: Admin, oracle: Pubkey, price: int):
         Pubkey.from_string("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH"),
         provider
     )
-    # markets = admin.get_perp_market_accounts()
-    # for market in markets:
-    #     data = await get_feed_data(program, market.amm.oracle)
-    #     price = admin.get_oracle_price_data_for_perp_market(market.market_index).price
-    #     print(f"price: {price}")
-    #     print(f"price precision price: {price / PRICE_PRECISION}")
-    #     print(f"exponent price: {price * (10 ** data.exponent)}")
-    #     print(f"price feed data: {data}")
-    data = await get_feed_data(program, oracle)
-    print(data)
-    exp = data.exponent
-    # price_normalized = price * (10 ** exp)
     price_normalized = price / PRICE_PRECISION
-    print(price)
-    # print(10 ** exp)
-    # print(price * (10 ** exp))
     print(f"setting price (normalized) {price_normalized}")
     sig = await set_price_feed(program, oracle, price_normalized)
     return sig

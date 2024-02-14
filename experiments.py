@@ -12,13 +12,14 @@ from anchorpy import Wallet
 
 from driftpy.accounts import get_user_account_public_key
 from driftpy.account_subscription_config import AccountSubscriptionConfig
+from driftpy.types import OrderParams
 from driftpy.drift_client import DriftClient
 from driftpy.drift_user import DriftUser
 
 from slack import SimulationResultBuilder, Slack
-from helpers import load_local_users
+from helpers import load_local_users, load_nonidle_users_for_market
 from actions import get_action
-from scenarios import oracle_jump
+from scenarios import close_market, oracle_jump
 
 @dataclass
 class Tester:
@@ -39,6 +40,9 @@ async def load_subaccounts(chs):
             await ch.add_user(id)
         if len(subaccount_ids) != 0:
             active_chs.append(ch)
+    
+    # for ch in active_chs:
+    #     await ch.account_subscriber.update_cache()
     return active_chs
 
 
@@ -51,19 +55,29 @@ class Simulator:
         self.sim_results = sim_results
 
     async def setup(self):
-        agents, admin = await load_local_users(None, self.connection)
+        agents, admin = await load_local_users(None, self.connection, num_users=1)
 
         self.admin = admin
-        self.agents = await load_subaccounts(agents)
 
         slot = (await self.connection.get_slot()).value
         self.sim_results.set_start_slot(slot)
 
         users = 0
-        for agent in agents:
+        # for agent in agents:
+        #     data = agent.get_user().get_user_account_and_slot()
+        #     print(f"user: {agent.authority}")
+        #     print(data is not None)
+        #     for _ in agent.sub_account_ids:
+        #         users += 1
+        # self.sim_results.add_total_users(users)
+
+        agents = await load_nonidle_users_for_market(admin, 6)
+        self.agents = await load_subaccounts(agents)
+        for agent in self.agents:
             for _ in agent.sub_account_ids:
                 users += 1
         self.sim_results.add_total_users(users)
+        asyncio.sleep(30)
 
     async def generate_and_execute_action(self):
         action = get_action(self.admin)
@@ -90,23 +104,28 @@ class Simulator:
             self.connection,
             wallet,
             "mainnet",
-            account_subscription=AccountSubscriptionConfig("websocket")
+            account_subscription=AccountSubscriptionConfig("websocket"),
         )
 
         sig = (await drift_client.initialize_user())
-        await asyncio.sleep(3)
+        await asyncio.sleep(15)
 
         command = ["solana", "confirm", f"{sig}"]
         output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
         print(f"initialize user status: {output}")
 
-        await drift_client.add_user(0)
         await drift_client.subscribe()
+        # await drift_client.add_user(0)
 
         drift_user = drift_client.get_user()
-        await drift_user.subscribe()
+        # await drift_user.subscribe()
 
         self.tester = Tester(drift_client, drift_user)
+
+        await asyncio.sleep(3)
+
+        user_account = drift_user.get_user_account_and_slot()
+        print(user_account)
 
         print(f"initialized tester")
 
@@ -124,15 +143,12 @@ async def main():
 
     await simulator.setup()
 
-    await oracle_jump(simulator.admin, 5, 0, None, 0.01)
-
-    await asyncio.sleep(3)
-
-    opd = simulator.admin.get_oracle_price_data_for_perp_market(0).price # type: ignore
-    print(opd)
+    # await simulator.create_tester()
+    await close_market(simulator.admin, simulator.agents, sim_results, 6)
+    # await oracle_jump(simulator.admin, 10, 0, None, 0.01)
 
     # while True:
-    #     await asyncio.sleep(3_500)
+    #     await asyncio.sleep(3_600)
     # await simulator.experiment(10)
 
     # await simulator.create_tester()
