@@ -18,8 +18,9 @@ python3.10 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-bash setup.sh
-bash run.sh
+in a different terminal, run bash start_local.sh to start the local validator with all accounts
+
+in the original terminal, run bash run.sh
 ```
 
 ## Environment Variables

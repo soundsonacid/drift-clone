@@ -3,6 +3,7 @@ solana
 tqdm 
 pandas 
 ipywidgets
+driftpy
 jupyter
 asyncio
 python-dotenv
