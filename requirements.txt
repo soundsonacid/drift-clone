@@ -1,5 +1,5 @@
-anchorpy==0.10.0
-solana
+anchorpy==0.17.1
+solana==0.30.1
 tqdm 
 pandas 
 ipywidgets
@@ -10,6 +10,6 @@ python-dotenv
 termcolor
 slack-sdk
 parsing
-pythclient
+pythclient==0.1.4
 autopep8==2.0.2
 flake8==6.0.0

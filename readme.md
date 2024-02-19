@@ -46,6 +46,7 @@ These environment varibles are required to run the scripts
 
 - state is updated so users can close out 
 ```python 
+
     # update state 
     await state_ch.update_perp_auction_duration(0)
     await state_ch.update_lp_cooldown_time(0)
