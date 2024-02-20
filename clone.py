@@ -1,3 +1,4 @@
+import time
 import requests
 import json
 from solana.rpc.async_api import AsyncClient
@@ -294,6 +295,7 @@ def setup_validator_script(
 
 
 async def scrape():
+    start = time.time()
     config = configs['mainnet']
     if "RPC_URL" in os.environ:
         url = os.getenv("RPC_URL")
@@ -467,7 +469,7 @@ async def scrape():
                     ty_acc_info,
                     str(ty_acc_addr)
                 )
-            else:
+            elif account_type in ["InsuranceFundStake", "State", "PhoenixV1FullfillmenConfig", "ReferrerName"]:
                 '''
                 For ['InsuranceFundStake', 'State', 'User', 'UserStats', 'ReferrerName']
                 decode the data, and save it in type_accounts for further processing
@@ -475,7 +477,7 @@ async def scrape():
                 # for addr, enc_account in zip(addr_info, acc_info):
                 # if account_type == "User":
                 #     data = ty_acc_info['data'][0]
-                #     ty_acc_info['decoded_data'] = decode_user(base64.b64decode(data))
+                    # ty_acc_info['decoded_data'] = decode_user(base64.b64decode(data))
                 #     ty_acc_info['addr'] = ty_acc_addr
 
                 #     type_accounts[account_type].append(ty_acc_info)
@@ -485,6 +487,8 @@ async def scrape():
                     ch, account_type, data)
                 ty_acc_info['addr'] = ty_acc_addr
 
+                type_accounts[account_type].append(ty_acc_info)
+            else:
                 type_accounts[account_type].append(ty_acc_info)
 
     print("total size of type_accounts to modify")
@@ -531,45 +535,86 @@ async def scrape():
         accounts = type_accounts[ty]
         save_path = user_path if ty == user_type else user_stats_path
         print(f"Modifying {ty} accounts: {len(accounts)}...")
-        for account_dict in accounts:
-            obj = account_dict.pop('decoded_data')
-            addr: Pubkey = account_dict.pop('addr')
-            old_auth = str(obj.authority)
+        for raw_account in accounts:
+            account_bytes = base64.b64decode(raw_account["data"][0])
+            old_auth = str(Pubkey(account_bytes[8:40]))
+            # print(old_auth)
             if old_auth not in auths_to_kps:
-                new_auth = Keypair()
-                auths_to_kps[old_auth] = new_auth
-                with open(keypairs_dir/f'{new_auth.pubkey()}.secret', 'w') as f:
-                    f.write(new_auth.secret().hex())
+                new_auth_kp = Keypair()
+                auths_to_kps[old_auth] = new_auth_kp
+                with open(keypairs_dir/f'{new_auth_kp.pubkey()}.secret', 'w') as f:
+                    f.write(new_auth_kp.secret().hex())
+                new_auth = new_auth_kp.pubkey()
             else:
-                new_auth = auths_to_kps[old_auth]
-            # save objects with new authorities
-            obj.authority = new_auth.pubkey()
+                new_auth = auths_to_kps[old_auth].pubkey()
 
+            new_raw_account = account_bytes[:8] + bytes(new_auth) + account_bytes[40:]
             if ty == user_type:
                 n_users += 1
                 auths_to_subacc[old_auth] = auths_to_subacc.get(
                     old_auth, []
-                ) + [obj.sub_account_id]
+                ) + [new_auth]
                 new_addr = get_user_account_public_key(
                     ch.program_id,
-                    new_auth.pubkey(),
-                    obj.sub_account_id
+                    new_auth,
                 )
             elif ty == user_stats_type:
                 n_users_stats += 1
                 new_addr = get_user_stats_account_public_key(
-                    ch.program_id,
-                    new_auth.pubkey(),
-                )
+                        ch.program_id,
+                        new_auth,
+                    )
             else:
                 raise Exception(f"Unknown type {ty}")
-
-            account_dict['data'][0] = encode_account_to_b64_data(ch, ty, obj)
+            
+            account_dict['data'][0] = base64.b64encode(new_raw_account).decode('utf-8')
             save_account_info(
                 save_path/(str(new_addr) + '.json'),
                 account_dict,
                 str(new_addr)
             )
+    #     accounts = type_accounts[ty]
+    #     save_path = user_path if ty == user_type else user_stats_path
+    #     print(f"Modifying {ty} accounts: {len(accounts)}...")
+        # for account_dict in accounts:
+        #     obj = account_dict.pop('decoded_data')
+        #     addr: Pubkey = account_dict.pop('addr')
+        #     old_auth = str(obj.authority)
+        #     if old_auth not in auths_to_kps:
+        #         new_auth = Keypair()
+        #         auths_to_kps[old_auth] = new_auth
+        #         with open(keypairs_dir/f'{new_auth.pubkey()}.secret', 'w') as f:
+        #             f.write(new_auth.secret().hex())
+        #     else:
+        #         new_auth = auths_to_kps[old_auth]
+        #     # save objects with new authorities
+        #     obj.authority = new_auth.pubkey()
+
+    #     #     if ty == user_type:
+    #     #         n_users += 1
+    #     #         auths_to_subacc[old_auth] = auths_to_subacc.get(
+    #     #             old_auth, []
+    #     #         ) + [obj.sub_account_id]
+    #     #         new_addr = get_user_account_public_key(
+    #     #             ch.program_id,
+    #     #             new_auth.pubkey(),
+    #     #             obj.sub_account_id
+    #     #         )
+    #     #     elif ty == user_stats_type:
+    #     #         n_users_stats += 1
+    #     #         new_addr = get_user_stats_account_public_key(
+    #     #             ch.program_id,
+    #     #             new_auth.pubkey(),
+    #     #         )
+    #     #     else:
+    #     #         raise Exception(f"Unknown type {ty}")
+
+    #         account_dict['data'][0] = encode_account_to_b64_data(ch, ty, obj)
+    #         save_account_info(
+    #             save_path/(str(new_addr) + '.json'),
+    #             account_dict,
+    #             str(new_addr)
+    #         )
 
     # same thing with insurance fund
     ty = "InsuranceFundStake"
@@ -580,7 +625,7 @@ async def scrape():
         obj: InsuranceFundStakeAccount = account_dict.pop('decoded_data')
         addr: Pubkey = account_dict.pop('addr')
         old_auth = str(obj.authority)
-        assert old_auth in auths_to_kps
+        assert old_auth in auths_to_kps, f"old_auth {old_auth} not in auths_to_kps"
         new_auth: Keypair = auths_to_kps[old_auth]
 
         obj.authority = new_auth.pubkey()
@@ -605,7 +650,7 @@ async def scrape():
     )
 
     print(f'bash {script_file} to start the local validator...')
-    print('done :)')
+    print(f'done in {time.time() - start}s :)')
 
 if __name__ == '__main__':
     import asyncio

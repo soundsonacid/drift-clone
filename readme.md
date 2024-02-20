@@ -12,7 +12,7 @@ note: need solana-cli v1.14.7 or greater for local validator's --account-dir fla
 
 
 
-## Quick Run (method 2 - recommend)
+## Quick Run (method 2)
 ```
 python3.10 -m venv venv
 source venv/bin/activate
@@ -22,6 +22,16 @@ in a different terminal, run bash start_local.sh to start the local validator wi
 
 in the original terminal, run bash run.sh
 ```
+
+## Quick Run (method 3 - poetry)
+```
+poetry shell
+poetry install
+in a different terminal, run bash start_local.sh to start the local validator with all accounts
+
+in the original terminal, run bash run.sh
+```
+
 
 ## Environment Variables
 
