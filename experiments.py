@@ -144,7 +144,7 @@ async def main():
     await simulator.setup()
 
     # await simulator.create_tester()
-    await close_market(simulator.admin, simulator.agents, sim_results, 6)
+    await close_market(simulator.admin, simulator.agents, sim_results, 10)
     # await oracle_jump(simulator.admin, 10, 0, None, 0.01)
 
     # while True:

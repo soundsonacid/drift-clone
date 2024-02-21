@@ -95,13 +95,9 @@ async def close_market(
     # remove liq
     print("removing all user liq")
     liq_sigs: list[Signature] = []
-    for agent in agents:
-        while agent.get_user().account_subscriber.data_and_slot is None:
-            print(f"no data found for {str(agent.authority)}, refreshing...")
-            data = await get_user_account_and_slot(agent.program, get_user_account_public_key(agent.program_id, agent.authority))  # type: ignore
-            print(data)
-            agent.account_subscriber.data_and_slot = data
-            await asyncio.sleep(0)
+    print(f"removing lp for {len(agents)} agents")
+    for i, agent in enumerate(agents):
+        print(f"removing liq for agent: {i}")
         for subaccount in agent.sub_account_ids:
             position = agent.get_perp_position(market_index, subaccount)
             if position and position.lp_shares > 0:
@@ -131,7 +127,7 @@ async def close_market(
     assert perp_market
 
     print(f"user lp shares: {perp_market.amm.user_lp_shares}") # type: ignore
-    assert perp_market.amm.user_lp_shares == 0, "user lp shares dne 0" # type: ignore
+    assert perp_market.amm.user_lp_shares == 0, f"user lp shares {perp_market.amm.user_lp_shares} dne 0" # type: ignore
 
     print("waiting for expiry...")
 
