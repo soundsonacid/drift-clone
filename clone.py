@@ -261,37 +261,38 @@ def encode_account_to_b64_data(ch, type, account):
     return data
 
 
-# def setup_validator_script(
-#     ch: DriftClient,
-#     validator_path: str,
-#     script_file: str
-# ):
-#     # load accounts
-#     validator_str = f"#!/bin/bash\n{validator_path}"
-#     # for d in accounts_dir.iterdir():
-#     #     if '.so' not in str(d):
-#     #         validator_str += f' --account-dir {d}'
+def setup_validator_script(
+    ch: DriftClient,
+    validator_path: str,
+    script_file: str
+):
+    # load accounts
+    
+    validator_str = f"#!/bin/bash\n{validator_path}"
+    # for d in accounts_dir.iterdir():
+    #     if '.so' not in str(d):
+    #         validator_str += f' --account-dir {d}'
 
-#     validator_str += ' --account-dir accounts/'
+    validator_str += ' --account-dir accounts/'
 
-#     # load program
-#     # https://github.com/drift-labs/protocol-v2/blob/master/sdk/src/config.ts
-#     program_address = str(ch.program_id)
-#     program_path = f"{accounts_dir}/{program_address}.so"
-#     # d = devnet
-#     # m = mainnet
-#     print('scraping mainnet program...')
-#     command = f"solana program dump -u m {program_address} {program_path}"
-#     os.system(command)
+    # load program
+    # https://github.com/drift-labs/protocol-v2/blob/master/sdk/src/config.ts
+    program_address = str(ch.program_id)
+    program_path = f"{accounts_dir}/{program_address}.so"
+    # d = devnet
+    # m = mainnet
+    print('scraping mainnet program...')
+    command = f"solana program dump -u m {program_address} {program_path}"
+    os.system(command)
 
-#     # program_path = f"driftpy/protocol-v2/target/deploy/clearing_house.so"
-#     validator_str += f' --bpf-program {program_address} {program_path}'
+    # program_path = f"driftpy/protocol-v2/target/deploy/clearing_house.so"
+    validator_str += f' --bpf-program {program_address} {program_path}'
 
-#     # hard reset
-#     validator_str += ' --reset'
+    # hard reset
+    validator_str += ' --reset'
 
-#     with open(script_file, 'w') as f:
-#         f.write(validator_str)
+    with open(script_file, 'w') as f:
+        f.write(validator_str)
 
 
 async def scrape():
@@ -649,11 +650,11 @@ async def scrape():
     print('setting up validator scripts...')
     validator_path = 'solana-test-validator'
     script_file = 'start_local.sh'
-    # setup_validator_script(
-    #     ch,
-    #     validator_path,
-    #     script_file
-    # )
+    setup_validator_script(
+        ch,
+        validator_path,
+        script_file
+    )
 
     print(f'bash {script_file} to start the local validator...')
     print(f'done in {time.time() - start}s :)')
