@@ -826,13 +826,13 @@ wmi = ["wmi (>=1.5.1,<2.0.0)"]
 
 [[package]]
 name = "driftpy"
-version = "0.7.24"
+version = "0.7.25"
 description = "A Python client for the Drift DEX"
 optional = false
 python-versions = ">=3.10,<4.0"
 files = [
-    {file = "driftpy-0.7.24-py3-none-any.whl", hash = "sha256:2ef7c51acb3d5e95417b3d2540f8cc39ab6af3fb892887f815355006e1f3cca6"},
-    {file = "driftpy-0.7.24.tar.gz", hash = "sha256:03a2ab3c48d1d89c297451a06924f632beb1f65509df33bddd193eb2bf675fdb"},
+    {file = "driftpy-0.7.25-py3-none-any.whl", hash = "sha256:3f3af5ec71a02d1e0af04e5c0d61327e973a0a1395a5e234faf1099007f3dd03"},
+    {file = "driftpy-0.7.25.tar.gz", hash = "sha256:757806b60547b59f1add4b4e6a67ed518b95554977bb7dd1ee7ebc68444f0058"},
 ]
 
 [package.dependencies]
@@ -3896,4 +3896,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "194fef042ba629a0ab07d9cc4432804a1b870f272399dfea4b30d4d3a17127d0"
+content-hash = "ad74131668ff31d399e9a1e81e157811ada8e2e9a492933bc7d3601e4f2337b8"

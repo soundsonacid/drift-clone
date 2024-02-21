@@ -71,13 +71,13 @@ class Simulator:
         #         users += 1
         # self.sim_results.add_total_users(users)
 
-        agents = await load_nonidle_users_for_market(admin, 6)
+        agents = await load_nonidle_users_for_market(admin, 10)
         self.agents = await load_subaccounts(agents)
         for agent in self.agents:
             for _ in agent.sub_account_ids:
                 users += 1
         self.sim_results.add_total_users(users)
-        asyncio.sleep(30)
+        await asyncio.sleep(30)
 
     async def generate_and_execute_action(self):
         action = get_action(self.admin)

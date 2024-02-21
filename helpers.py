@@ -73,7 +73,7 @@ async def load_local_users(
                 connection,
                 wallet,
                 "mainnet",
-                account_subscription=AccountSubscriptionConfig("websocket")
+                account_subscription=AccountSubscriptionConfig("cached")
             )
         else:
             ch = DriftClient(
@@ -136,11 +136,16 @@ async def load_nonidle_users_for_market(
 
     rpc_response_values = parsed_resp.result["value"] # type: ignore
 
-    agents = []
+    agents: list[DriftClient] = []
     tasks = []
 
     print("starting")
     counter = 0
+    await admin.account_subscriber.update_cache()
+    perp_market = admin.get_perp_market_account(market_index)
+    lp_shares = perp_market.amm.user_lp_shares # type: ignore
+    running_lp_shares = 0
+    print(f"Total users: {len(rpc_response_values)}")
     for i, program_account in enumerate(rpc_response_values):
         print(f"Processing user {i}", end='\r')
         user = decode_user(
@@ -148,6 +153,9 @@ async def load_nonidle_users_for_market(
         )
         for perp_position in user.perp_positions:
             if perp_position.market_index == market_index:
+                print(f"User {i} has position on market {market_index}: {perp_position.market_index}")
+                print(f"Total users in market: {counter + 1}")
+                running_lp_shares += perp_position.lp_shares
                 counter += 1
                 secret_file_path = pathlib.Path(keypairs_path) / f"{str(user.authority)}.secret"
                 
@@ -166,13 +174,15 @@ async def load_nonidle_users_for_market(
                     admin.connection,
                     wallet,
                     "mainnet",
-                    account_subscription=AccountSubscriptionConfig("websocket")
+                    account_subscription=AccountSubscriptionConfig("cached")
                 )
 
                 agents.append(agent)
 
+    assert lp_shares == running_lp_shares, f"lp shares {lp_shares} dne {running_lp_shares}" # type: ignore
     for agent in agents:
         await agent.subscribe()
+        await agent.account_subscriber.update_cache()
     # print(f"loaded {counter} agents.          ")
 
     print(f"loaded {len(agents)} agents.          ")

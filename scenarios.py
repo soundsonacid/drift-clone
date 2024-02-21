@@ -61,7 +61,7 @@ async def close_market(
     market_index: int
 ):
     # record stats pre-closing
-    # await admin.account_subscriber.update_cache()
+    await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
     sim_results.add_initial_perp_market(perp_market) # type: ignore
 
@@ -75,9 +75,10 @@ async def close_market(
     # update state
     await admin.update_perp_auction_duration(0)
     await admin.update_lp_cooldown_time(0)
-    for market in spot_markets:
-        await admin.update_update_insurance_fund_unstaking_period(market.market_index, 0)
-        await admin.update_withdraw_guard_threshold(market.market_index, 2**64 - 1)
+    # i don't think i need this for delisting one perp market, right ?
+    # for market in spot_markets:
+    #     await admin.update_update_insurance_fund_unstaking_period(market.market_index, 0)
+    #     await admin.update_withdraw_guard_threshold(market.market_index, 2**64 - 1)
 
     print(f"delisting market...")
     slot = (await admin.connection.get_slot()).value
@@ -92,41 +93,62 @@ async def close_market(
     for market in spot_markets:
         sig = await admin.update_spot_market_expiry(market.market_index, blocktime + offset)
 
+    before_user_lp_shares = perp_market.amm.user_lp_shares # type: ignore
+
     # remove liq
     print("removing all user liq")
     liq_sigs: list[Signature] = []
     print(f"removing lp for {len(agents)} agents")
+    print(f"total market lp shares: {perp_market.amm.user_lp_shares}") # type: ignore
+    running_lp_removed = 0
     for i, agent in enumerate(agents):
         print(f"removing liq for agent: {i}")
         for subaccount in agent.sub_account_ids:
+            print(f"removing liq for agent: {i} subaccount: {subaccount}")
             position = agent.get_perp_position(market_index, subaccount)
-            if position and position.lp_shares > 0:
+            print(f"agent has position: {position is not None}")
+            print(f"agent has lp shares: {position.lp_shares > 0}") # type: ignore
+            print(f"total lp shares for agent: {position.lp_shares}") # type: ignore
+            if position is not None and position.lp_shares > 0:
                 print(
                     f"removing lp on market {market_index} "
                     f"for user: {str(agent.authority)} " 
                     f"(sub_account_id: {subaccount}, shares: {position.lp_shares})"
                 )
-
+                running_lp_removed += position.lp_shares
                 sig = await agent.remove_liquidity(position.lp_shares, market_index, subaccount)
-                liq_sigs.append(sig)
+                command = ["solana", "confirm", f"{sig}"]
+                output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+                if "Confirmed" in output or "Processed" in output or "Finalized" in output:
+                    print(f"confirmed remove liq tx: {sig}")
+                else:
+                    print(f"failed to confirm remove liq tx: {output}")  
+                await asyncio.sleep(5)
+                await admin.account_subscriber.update_cache()
+                perp_market = admin.get_perp_market_account(market_index)
+                assert perp_market.amm.user_lp_shares == before_user_lp_shares - running_lp_removed, f"user lp shares {perp_market.amm.user_lp_shares} dne {before_user_lp_shares - running_lp_removed}" # type: ignore 
+                # liq_sigs.append(sig)
 
-    for sig in liq_sigs:
-        try:
-            command = ["solana", "confirm", f"{sig}"]
-            output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
-            if "Confirmed" in output or "Processed" in output or "Finalized" in output:
-                print(f"confirmed remove liq tx: {sig}")
-            else:
-                print(f"failed to confirm remove liq tx: {output}")     
-        except Exception as e:
-            print(f"error confirming remove_liquidity error: {e}")
+    # for i, sig in enumerate(liq_sigs):
+    #     print(f"confirming remove liq tx: {i}/{len(liq_sigs)}")
+    #     try:
+    #         command = ["solana", "confirm", f"{sig}"]
+    #         output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
+    #         if "Confirmed" in output or "Processed" in output or "Finalized" in output:
+    #             print(f"confirmed remove liq tx: {sig}")
+    #         else:
+    #             print(f"failed to confirm remove liq tx: {output}")     
+    #     except Exception as e:
+    #         print(f"error confirming remove_liquidity error: {e}")
     
-    await asyncio.sleep(30) # make sure we get a new account 
-    # await admin.account_subscriber.update_cache()
+    await asyncio.sleep(15) # make sure we get a new account 
+    await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
     assert perp_market
 
-    print(f"user lp shares: {perp_market.amm.user_lp_shares}") # type: ignore
+    print(f"user lp shares: {before_user_lp_shares}") # type: ignore
+    print(f"removed lp shares: {running_lp_removed}")
+    print(f"total lp == removed lp: {before_user_lp_shares == running_lp_removed}") # type: ignore
     assert perp_market.amm.user_lp_shares == 0, f"user lp shares {perp_market.amm.user_lp_shares} dne 0" # type: ignore
 
     print("waiting for expiry...")
@@ -157,7 +179,7 @@ async def close_market(
         print(f"failed to confirm settle tx: {output}")     
 
     await asyncio.sleep(30) # make sure we get a new account from update cache
-    # await admin.account_subscriber.update_cache()
+    await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
     assert perp_market
 
