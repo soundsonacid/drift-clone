@@ -27,8 +27,9 @@ in the original terminal, run bash run.sh
 1. run `poetry shell`
 2. run `poetry install`
 3. run `python clone.py` to clone mainnet state (clone.py:495 determines which market index to filter for)
-4. run `bash start_local.sh` in a separate terminal to start the local validator
-5. once the local validator is started, run `python experiments.py` (make sure to change the market index on experiments.py:147 and experiments.py:74 to match the market index of the market you cloned users for)
+4. run `solana config set --url http://127.0.0.1:8899`
+5. run `bash start_local.sh` in a separate terminal to start the local validator
+6. once the local validator is started, run `python experiments.py` (make sure to change the market index on experiments.py:147 and experiments.py:74 to match the market index of the market you cloned users for)
 
 ## Environment Variables
 

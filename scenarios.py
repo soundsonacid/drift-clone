@@ -276,7 +276,4 @@ async def close_market(
                     sim_results.add_settle_user_fail(e, market_index)
 
 
-        print(f"settled fin... {i + 1}/{len(agents)}") # +1 cause i starts at 0
-
-    sim_results.set_end_time(dt.datetime.utcnow())
-    sim_results.post_result()
+        print(f"settled fin... {i + 1}/{len(agents)}") # +1 cause i starts at 0)
