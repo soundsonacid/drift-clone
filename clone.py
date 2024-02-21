@@ -488,6 +488,12 @@ async def scrape():
                 ty_acc_info['addr'] = ty_acc_addr
 
                 type_accounts[account_type].append(ty_acc_info)
+            elif account_type == "User":
+                data = ty_acc_info['data'][0]
+                user = decode_user(base64.b64decode(data))
+                for perp_position in user.perp_positions:
+                    if perp_position.market_index == 10:
+                        type_accounts[account_type].append(ty_acc_info)
             else:
                 type_accounts[account_type].append(ty_acc_info)
 
@@ -509,7 +515,7 @@ async def scrape():
         # update admin key of the state account
         print(f"Updating State admin key from {obj.admin} to {state_kp.pubkey()}...")
         obj.admin = state_kp.pubkey()
-        with open(keypairs_dir/'state.secret', 'w') as f:
+        with open(keypairs_dir/'1.secret', 'w') as f:
             f.write(state_kp.secret().hex())
 
         account_dict['data'][0] = encode_account_to_b64_data(ch, "State", obj)

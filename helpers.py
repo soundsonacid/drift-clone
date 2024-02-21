@@ -143,7 +143,9 @@ async def load_nonidle_users_for_market(
     counter = 0
     await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
+    print(perp_market.__dict__) # type: ignore
     lp_shares = perp_market.amm.user_lp_shares # type: ignore
+    users_with_lp_shares = 0
     running_lp_shares = 0
     print(f"Total users: {len(rpc_response_values)}")
     for i, program_account in enumerate(rpc_response_values):
@@ -155,7 +157,10 @@ async def load_nonidle_users_for_market(
             if perp_position.market_index == market_index:
                 print(f"User {i} has position on market {market_index}: {perp_position.market_index}")
                 print(f"Total users in market: {counter + 1}")
+                # assert user.user
                 running_lp_shares += perp_position.lp_shares
+                if perp_position.lp_shares > 0:
+                    users_with_lp_shares += 1
                 counter += 1
                 secret_file_path = pathlib.Path(keypairs_path) / f"{str(user.authority)}.secret"
                 
@@ -179,6 +184,8 @@ async def load_nonidle_users_for_market(
 
                 agents.append(agent)
 
+    print(f"total users with lp shares: {users_with_lp_shares}")
+    print(f"total identified lp shares: {running_lp_shares}")
     assert lp_shares == running_lp_shares, f"lp shares {lp_shares} dne {running_lp_shares}" # type: ignore
     for agent in agents:
         await agent.subscribe()

@@ -1,6 +1,8 @@
 import asyncio
+import pprint
 import subprocess
 import traceback
+import datetime as dt
 
 from typing import Optional
 
@@ -9,12 +11,17 @@ from solders.signature import Signature # type: ignore
 from driftpy.admin import Admin
 from driftpy.drift_client import DriftClient
 from driftpy.decode.utils import decode_name
+from driftpy.drift_user import DriftUser
 from driftpy.accounts import get_user_account_and_slot
 from driftpy.addresses import get_user_account_public_key
+from driftpy.account_subscription_config import AccountSubscriptionConfig
+from termcolor import colored
 
 from actions import *
+from liquidator import Liquidator
 from slack import ExpiredMarket, SimulationResultBuilder
 from close import get_insurance_fund_balance, get_spot_vault_balance
+from main import _send_ix
 
 async def oracle_jump(
     admin: Admin,
@@ -60,6 +67,31 @@ async def close_market(
     sim_results: SimulationResultBuilder,
     market_index: int
 ):
+    addresses = [
+        "73MRyWg49PtwRPw8Sw8wVMFKkDw32TSDpRzwgkRTPWHy",
+        "9k5yGj6BNB6RL1UP2ov27FigC4zMnsWn8uEgQR2uTqPR",
+        "62aSfg2D3SFFUTa3aVLWMbqwZZQ5SUT4Wo8cU8x1hWQd",
+        "oSuviqZVyiu7ivG8Ci5XPHgWLJNHWpHAQTWFbsEfRMA",
+        "8kKT2Ev19XwqAtH4fQgG5h719qvp8ghb9Dj3KHmrptXY",
+        "H9PoPvtS7ytSe4SnH3WoqC4KYq4SMz9v56gdf8i6KFL5",
+        "37soLzPwbJZGkSn2P4GtiCN4pmP2ocWrGAfysjsvtzNT",
+        "4DJNVNamaBqx4S6YGhBchwtxWDuRPGebPkrqMP8cXiRY",
+        "GPtN6vPZ56Bx6zcepq8XZARDMD2MPQJDF8i6Goyj9Ve4",
+        "Cu9JXzYSZb5aav5j5MertGDbzKTvCAvwvB4CGYZCHg5z",
+        "Eut9Q3ykZD6Pjy9HN1jh1UB85Q5UmG4SYrAVwq83WbrV",
+        "F8oCfQAqoS3DVGQPmwRn4bLanZkspixB8QYs2N4rauoB",
+        "2zMUwqzbbmB9CJDHFLDvummsrLrgLJ53fZN2JcWz9uwj",
+        "EB4JnTGia9Ka1BXrhLCyXQGkxVHwf497XD42Qdx4uotx",
+        "73cQwHChtpqs4ErwAuYQP1tSgzfm7G1WKCmvpyp2z3Up",
+        "9ZyHrSAm9W3WgnHAjQRmaMmZXuNfEJ9MdChr8R6LKHGw",
+        "9WMR2CqVqP3vgwWHDV6KnPrKd9cEXvUygcuXSaookiwW",
+        "HLDz2gDAhTKRrRUzaybKTGCEkJfpdxjHfQA14HcWnsYx",
+        "5Vi1aYq4w26zBwouVaJTwSa1m6NDyNZTqLnBjDaRpb6U",
+        "A2AnxrzgsSKyEv1emS2PzU8uYKoeVN1irhRJUZjJ3ZDx",
+        "Hg2WRNNU1vKUEtiA78wybfJqGvrSdh4X41sFzytKVShy",
+        "5KKTWbCKpSLzFYbr6YuWo7qUYhQXwqeMSzZifVDU3uxi"
+    ]
+    
     # record stats pre-closing
     await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
@@ -199,4 +231,52 @@ async def close_market(
         perp_market.amm.historical_oracle_data.last_oracle_price / PRICE_PRECISION,
     )
     sim_results.add_settled_expired_market(expired_market)
-    
+
+    success = False
+    while not success:
+        attempt = -1
+        num_fails = 0
+        success = True
+        i = 0
+        errors = [] # type: ignore
+
+
+        if attempt > 5:
+            msg = "something went wrong during settle expired position with market "
+            msg += f"{10}... \n"
+            msg += f"failed to 10 {num_fails} users... \n"
+            msg += f"error msgs: {pprint.pformat(errors, indent=4)}"
+            sim_results.post_fail(msg)
+            return            
+        
+        attempt += 1
+
+        print(
+                colored(
+                    f" =>> market 10: settle attempt {attempt}", "blue"
+                )
+            )
+        
+        for i, agent in enumerate(agents):
+            await agent.account_subscriber.update_cache()
+            for subaccount in agent.sub_account_ids:
+                position = agent.get_perp_position(market_index, subaccount)
+                if position is None:
+                    continue
+                user_account = agent.get_user_account(subaccount)
+                try:
+                    await agent.settle_pnl(agent.get_user_account_public_key(subaccount), user_account, market_index)
+                    sim_results.add_settle_user_success(market_index)
+                except Exception as e:
+                    success = False
+                    num_fails += 1
+                    if attempt > 0:
+                        print(position, i, subaccount)
+                    errors.append(e)
+                    sim_results.add_settle_user_fail(e, market_index)
+
+
+        print(f"settled fin... {i + 1}/{len(agents)}") # +1 cause i starts at 0
+
+    sim_results.set_end_time(dt.datetime.utcnow())
+    sim_results.post_result()
