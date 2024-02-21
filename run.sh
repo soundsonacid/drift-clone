@@ -1,1 +1,1 @@
-python clone.py && python close.py
+python clone.py && python experiments.py
