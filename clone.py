@@ -1,4 +1,5 @@
 import time
+import jsonrpcclient
 import requests
 import json
 from solana.rpc.async_api import AsyncClient
@@ -21,6 +22,7 @@ from driftpy.accounts import (
     get_user_stats_account_public_key,
     get_insurance_fund_stake_public_key,
 )
+from driftpy.address_lookup_table import get_address_lookup_table
 
 from anchorpy import Provider
 from anchorpy import Wallet
@@ -493,7 +495,7 @@ async def scrape():
                 data = ty_acc_info['data'][0]
                 user = decode_user(base64.b64decode(data))
                 for perp_position in user.perp_positions:
-                    if perp_position.market_index == 10:
+                    if perp_position.market_index == 9:
                         type_accounts[account_type].append(ty_acc_info)
             else:
                 type_accounts[account_type].append(ty_acc_info)
@@ -646,6 +648,38 @@ async def scrape():
             account_dict,
             str(new_addr)
         )
+
+    # alt = (await connection.get_account_info(Pubkey.from_string("D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c"))).value
+    query =   {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getAccountInfo",
+        "params": [
+        "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c",
+        {
+            "encoding": "base64"
+        }
+        ]
+    }
+
+    resp = requests.post(
+        connection._provider.endpoint_uri,
+        headers={"Content-Type": "application/json"},
+        json=query
+    )
+
+    try:
+        resp = json.loads(resp.text)
+    except Exception as e:
+        print(resp.text)
+        raise e
+    
+    path = init_account_dir("alt")
+    save_account_info(
+        path/"D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c.json",
+        resp['result']['value'],
+        "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c"
+    )
 
     print('setting up validator scripts...')
     validator_path = 'solana-test-validator'

@@ -1,9 +1,12 @@
 import asyncio
+import os
 import pathlib
 import subprocess
 import datetime as dt
+import csv
 
 from dataclasses import dataclass
+from typing import cast
 
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair # type: ignore
@@ -12,14 +15,15 @@ from anchorpy import Wallet
 
 from driftpy.accounts import get_user_account_public_key
 from driftpy.account_subscription_config import AccountSubscriptionConfig
-from driftpy.types import OrderParams
+from driftpy.types import InsuranceFund, MarketType
 from driftpy.drift_client import DriftClient
 from driftpy.drift_user import DriftUser
+from driftpy.addresses import get_insurance_fund_vault_public_key
 
 from slack import SimulationResultBuilder, Slack
-from helpers import load_local_users, load_nonidle_users_for_market
+from helpers import append_to_csv, load_local_users, load_nonidle_users_for_market
 from actions import get_action
-from scenarios import close_market, oracle_jump
+from scenarios import close_market, move_oracle_down_40, move_oracle_up_40, oracle_jump
 
 @dataclass
 class Tester:
@@ -71,7 +75,7 @@ class Simulator:
         #         users += 1
         # self.sim_results.add_total_users(users)
 
-        agents = await load_nonidle_users_for_market(admin, 10)
+        agents = await load_nonidle_users_for_market(admin, 9)
         self.agents = await load_subaccounts(agents)
         for agent in self.agents:
             for _ in agent.sub_account_ids:
@@ -129,9 +133,60 @@ class Simulator:
 
         print(f"initialized tester")
 
-    async def test_exchange_behavior(self):
-        # TODO
-        pass
+    async def test_exchange_behavior(self, market_index: int):
+        '''
+            This is currently impl for the move oracle up & down 40% scenario
+        '''
+        # dump initial state of amm & insurance into csv
+        admin = self.admin
+
+        amm = admin.get_perp_market_account(market_index).amm # type: ignore
+        append_to_csv(amm, "sim_results.csv", "init amm")
+
+        usdc_spot_market = admin.get_spot_market_account(0) # type: ignore
+        insurance_vault = usdc_spot_market.insurance_fund # type: ignore
+        append_to_csv(insurance_vault, "sim_results.csv", "init if")
+
+        for user in self.agents:
+            await user.account_subscriber.update_cache()
+            for subaccount in user.sub_account_ids:
+                try:
+                    sig = await user.cancel_orders(sub_account_id=subaccount)
+                    print(f"canceled orders: {sig}")
+                except Exception as e:
+                    print(f"error canceling orders for user: {user.authority} subaccount {subaccount}: {e}")
+                    continue
+
+        for user in self.agents:
+            await user.account_subscriber.update_cache()
+            for subaccount in user.sub_account_ids:
+                user_account = user.get_user(subaccount).get_user_account()
+                assert user_account.open_orders == 0, "user has open orders"
+
+        # this is a hacky way to wait for the keepyrs script to be done
+        # i was having issues getting keepyrs into here as a dep so i run it separately
+        # see https://github.com/soundsonacid/keepyrs/tree/sim-keepyrs for the script
+        flag_file = os.path.expanduser('~/done_flag.txt')
+        while True:
+            if os.path.exists(flag_file):
+                print("keepyrs done")
+                os.remove(flag_file)
+                break
+            else:
+                print("waiting for keepyrs to finish..")
+            await asyncio.sleep(1) 
+
+        # dump final state of amm & insurance into csv
+        await asyncio.sleep(30)
+        await admin.account_subscriber.update_cache() # type: ignore
+        
+        amm = admin.get_perp_market_account(market_index).amm # type: ignore
+        append_to_csv(amm, "sim_results.csv", "final amm")
+
+        usdc_spot_market = admin.get_spot_market_account(0) # type: ignore
+        insurance_vault = usdc_spot_market.insurance_fund # type: ignore
+        append_to_csv(insurance_vault, "sim_results.csv", "final if")
+
 
 async def main():
     print("spinning up drift simulation..")
@@ -143,8 +198,13 @@ async def main():
 
     await simulator.setup()
 
+    await move_oracle_up_40(simulator.admin, 9)
+
+    # await move_oracle_down_40(simulator.admin, 9)
+
+    await simulator.test_exchange_behavior(9)
     # await simulator.create_tester()
-    await close_market(simulator.admin, simulator.agents, sim_results, 10)
+    # await close_market(simulator.admin, simulator.agents, sim_results, 10)
     # await oracle_jump(simulator.admin, 10, 0, None, 0.01)
 
     # while True:

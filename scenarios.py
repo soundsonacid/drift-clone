@@ -61,37 +61,41 @@ async def oracle_jump(
     else:
         raise ValueError("need to provide price or pct delta")
 
+
+async def move_oracle_up_40(
+    admin: Admin,
+    market_index: int
+):
+    oracle = admin.get_perp_market_account(market_index).amm.oracle # type: ignore
+    price = admin.get_oracle_price_data_for_perp_market(market_index).price # type: ignore
+    new_price = int(price * 1.4)
+    sig = await set_oracle_price(admin, oracle, new_price)
+    print(f"new oracle price: {new_price} set for perp market: {market_index}: {sig}")
+    await asyncio.sleep(30)
+    await admin.account_subscriber.update_cache()
+    assert admin.get_oracle_price_data_for_perp_market(market_index).price == new_price, f"oracle price {admin.get_oracle_price_data_for_perp_market(market_index).price} dne {new_price}" # type: ignore
+
+
+async def move_oracle_down_40(
+    admin: Admin,
+    market_index: int
+):
+    oracle = admin.get_perp_market_account(market_index).amm.oracle # type: ignore
+    price = admin.get_oracle_price_data_for_perp_market(market_index).price # type: ignore
+    new_price = int(price * 0.6)
+    sig = await set_oracle_price(admin, oracle, new_price)
+    print(f"new oracle price: {new_price} set for perp market: {market_index}: {sig}")
+    await asyncio.sleep(15)
+    await admin.account_subscriber.update_cache()
+    assert admin.get_oracle_price_data_for_perp_market(market_index).price == new_price, f"oracle price {admin.get_oracle_price_data_for_perp_market(market_index).price} dne {new_price}" # type: ignore
+
+
 async def close_market(
     admin: Admin,
     agents: list[DriftClient],
     sim_results: SimulationResultBuilder,
     market_index: int
 ):
-    addresses = [
-        "73MRyWg49PtwRPw8Sw8wVMFKkDw32TSDpRzwgkRTPWHy",
-        "9k5yGj6BNB6RL1UP2ov27FigC4zMnsWn8uEgQR2uTqPR",
-        "62aSfg2D3SFFUTa3aVLWMbqwZZQ5SUT4Wo8cU8x1hWQd",
-        "oSuviqZVyiu7ivG8Ci5XPHgWLJNHWpHAQTWFbsEfRMA",
-        "8kKT2Ev19XwqAtH4fQgG5h719qvp8ghb9Dj3KHmrptXY",
-        "H9PoPvtS7ytSe4SnH3WoqC4KYq4SMz9v56gdf8i6KFL5",
-        "37soLzPwbJZGkSn2P4GtiCN4pmP2ocWrGAfysjsvtzNT",
-        "4DJNVNamaBqx4S6YGhBchwtxWDuRPGebPkrqMP8cXiRY",
-        "GPtN6vPZ56Bx6zcepq8XZARDMD2MPQJDF8i6Goyj9Ve4",
-        "Cu9JXzYSZb5aav5j5MertGDbzKTvCAvwvB4CGYZCHg5z",
-        "Eut9Q3ykZD6Pjy9HN1jh1UB85Q5UmG4SYrAVwq83WbrV",
-        "F8oCfQAqoS3DVGQPmwRn4bLanZkspixB8QYs2N4rauoB",
-        "2zMUwqzbbmB9CJDHFLDvummsrLrgLJ53fZN2JcWz9uwj",
-        "EB4JnTGia9Ka1BXrhLCyXQGkxVHwf497XD42Qdx4uotx",
-        "73cQwHChtpqs4ErwAuYQP1tSgzfm7G1WKCmvpyp2z3Up",
-        "9ZyHrSAm9W3WgnHAjQRmaMmZXuNfEJ9MdChr8R6LKHGw",
-        "9WMR2CqVqP3vgwWHDV6KnPrKd9cEXvUygcuXSaookiwW",
-        "HLDz2gDAhTKRrRUzaybKTGCEkJfpdxjHfQA14HcWnsYx",
-        "5Vi1aYq4w26zBwouVaJTwSa1m6NDyNZTqLnBjDaRpb6U",
-        "A2AnxrzgsSKyEv1emS2PzU8uYKoeVN1irhRJUZjJ3ZDx",
-        "Hg2WRNNU1vKUEtiA78wybfJqGvrSdh4X41sFzytKVShy",
-        "5KKTWbCKpSLzFYbr6YuWo7qUYhQXwqeMSzZifVDU3uxi"
-    ]
-    
     # record stats pre-closing
     await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
@@ -107,10 +111,6 @@ async def close_market(
     # update state
     await admin.update_perp_auction_duration(0)
     await admin.update_lp_cooldown_time(0)
-    # i don't think i need this for delisting one perp market, right ?
-    # for market in spot_markets:
-    #     await admin.update_update_insurance_fund_unstaking_period(market.market_index, 0)
-    #     await admin.update_withdraw_guard_threshold(market.market_index, 2**64 - 1)
 
     print(f"delisting market...")
     slot = (await admin.connection.get_slot()).value
@@ -160,18 +160,6 @@ async def close_market(
                 perp_market = admin.get_perp_market_account(market_index)
                 assert perp_market.amm.user_lp_shares == before_user_lp_shares - running_lp_removed, f"user lp shares {perp_market.amm.user_lp_shares} dne {before_user_lp_shares - running_lp_removed}" # type: ignore 
                 # liq_sigs.append(sig)
-
-    # for i, sig in enumerate(liq_sigs):
-    #     print(f"confirming remove liq tx: {i}/{len(liq_sigs)}")
-    #     try:
-    #         command = ["solana", "confirm", f"{sig}"]
-    #         output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
-    #         if "Confirmed" in output or "Processed" in output or "Finalized" in output:
-    #             print(f"confirmed remove liq tx: {sig}")
-    #         else:
-    #             print(f"failed to confirm remove liq tx: {output}")     
-    #     except Exception as e:
-    #         print(f"error confirming remove_liquidity error: {e}")
     
     await asyncio.sleep(15) # make sure we get a new account 
     await admin.account_subscriber.update_cache()

@@ -1,0 +1,57 @@
+oracle,historical_oracle_data,base_asset_amount_per_lp,quote_asset_amount_per_lp,fee_pool,base_asset_reserve,quote_asset_reserve,concentration_coef,min_base_asset_reserve,max_base_asset_reserve,sqrt_k,peg_multiplier,terminal_quote_asset_reserve,base_asset_amount_long,base_asset_amount_short,base_asset_amount_with_amm,base_asset_amount_with_unsettled_lp,max_open_interest,quote_asset_amount,quote_entry_amount_long,quote_entry_amount_short,quote_break_even_amount_long,quote_break_even_amount_short,user_lp_shares,last_funding_rate,last_funding_rate_long,last_funding_rate_short,last24h_avg_funding_rate,total_fee,total_mm_fee,total_exchange_fee,total_fee_minus_distributions,total_fee_withdrawn,total_liquidation_fee,cumulative_funding_rate_long,cumulative_funding_rate_short,total_social_loss,ask_base_asset_reserve,ask_quote_asset_reserve,bid_base_asset_reserve,bid_quote_asset_reserve,last_oracle_normalised_price,last_oracle_reserve_price_spread_pct,last_bid_price_twap,last_ask_price_twap,last_mark_price_twap,last_mark_price_twap5min,last_update_slot,last_oracle_conf_pct,net_revenue_since_last_funding,last_funding_rate_ts,funding_period,order_step_size,order_tick_size,min_order_size,max_position_size,volume24h,long_intensity_volume,short_intensity_volume,last_trade_ts,mark_std,oracle_std,last_mark_price_twap_ts,base_spread,max_spread,long_spread,short_spread,long_intensity_count,short_intensity_count,max_fill_reserve_fraction,max_slippage_ratio,curve_update_intensity,amm_jit_intensity,oracle_source,last_oracle_valid,target_base_asset_amount_per_lp,per_lp_base,padding1,padding2,total_fee_earned_per_lp,net_unsettled_funding_pnl,quote_asset_amount_with_unsettled_lp,reference_price_offset,padding,record_type
+3Qub3HaAJaa2xNY7SUqPKd3vVwTqDfDDkEUMPjXD2c1q,"{'last_oracle_price': 1672030, 'last_oracle_conf': 0, 'last_oracle_delay': 1, 'last_oracle_price_twap': 1675113, 'last_oracle_price_twap5min': 1672776, 'last_oracle_price_twap_ts': 1708989977}",-23755655579106,34756824672,"{'scaled_balance': 7691724856449, 'market_index': 0, 'padding': ListContainer([0, 0, 0, 0, 0, 0])}",220502357128439,435588772098970,1207100,187413818605087,273078877790952,309916683943452,846409,424565844907877,416022000000000,-410276000000000,5724863309762,21136690238,2000000000000000,26232767658,-651429080323,679141420675,-678895251277,700851981810,55605000000000,285416,285416,285416,189756,-4605289510,-22562324343,18453687436,37832669947,17071306751,7849107706,293597485,293529500,0,219335677990194,437905733652687,220941604851802,434722790444698,1672030,-1,1677972,1685750,1681861,1682949,250665406,703,-154000692,1708988584,3600,1000000000,100,1000000000,0,211934341211,5289761561,7353736743,1708989726,1211,3083,1708989923,5000,29500,10601,3975,646,0,100,50,100,200,OracleSource.Pyth(),True,0,4,0,0,131557329,0,0,0,"ListContainer: 
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0",init amm
+2CqkQvYxp9Mq4PqLvAQ1eryYxebUh4Liyn5YMDtXsYci,3232897629084,2929353142826,0,1123200,1708988427,3600,10000,5000,init if
+3Qub3HaAJaa2xNY7SUqPKd3vVwTqDfDDkEUMPjXD2c1q,"{'last_oracle_price': 2340675, 'last_oracle_conf': 0, 'last_oracle_delay': -250664127, 'last_oracle_price_twap': 2340676, 'last_oracle_price_twap5min': 2340676, 'last_oracle_price_twap_ts': 1709047654}",-23755655579106,34756824672,"{'scaled_balance': 7691724856449, 'market_index': 0, 'padding': ListContainer([0, 0, 0, 0, 0, 0])}",220502357128439,435588772098970,1207100,187413818605087,273078877790952,309916683943452,1184889,424565844907877,416022000000000,-410276000000000,5724863309762,21136690238,2000000000000000,26169650979,-651429080323,679141420675,-678895251277,700851981810,55605000000000,285416,285416,285416,189756,-4605289510,-22562324343,18453687436,34101629552,17071306751,7849107706,293597485,293529500,0,219335677990194,437905733652687,220941604851802,434722790444698,2340675,0,1677972,1685750,1681861,1682949,1288,518,-3885041087,1708988584,3600,1000000000,100,1000000000,0,211934341211,5289761561,7353736743,1708989726,1211,1,1708989923,5000,29500,10628,3975,646,0,100,50,100,200,OracleSource.Pyth(),True,0,4,0,0,131557329,0,0,0,"ListContainer: 
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0",final amm
+2CqkQvYxp9Mq4PqLvAQ1eryYxebUh4Liyn5YMDtXsYci,3232897629084,2929353142826,0,1123200,1708988427,3600,10000,5000,final if
+3Qub3HaAJaa2xNY7SUqPKd3vVwTqDfDDkEUMPjXD2c1q,"{'last_oracle_price': 1672030, 'last_oracle_conf': 0, 'last_oracle_delay': 1, 'last_oracle_price_twap': 1675113, 'last_oracle_price_twap5min': 1672776, 'last_oracle_price_twap_ts': 1708989977}",-23755655579106,34756824672,"{'scaled_balance': 7691724856449, 'market_index': 0, 'padding': ListContainer([0, 0, 0, 0, 0, 0])}",220502357128439,435588772098970,1207100,187413818605087,273078877790952,309916683943452,846409,424565844907877,416022000000000,-410276000000000,5724863309762,21136690238,2000000000000000,26232767658,-651429080323,679141420675,-678895251277,700851981810,55605000000000,285416,285416,285416,189756,-4605289510,-22562324343,18453687436,37832669947,17071306751,7849107706,293597485,293529500,0,219335677990194,437905733652687,220941604851802,434722790444698,1672030,-1,1677972,1685750,1681861,1682949,250665406,703,-154000692,1708988584,3600,1000000000,100,1000000000,0,211934341211,5289761561,7353736743,1708989726,1211,3083,1708989923,5000,29500,10601,3975,646,0,100,50,100,200,OracleSource.Pyth(),True,0,4,0,0,131557329,0,0,0,"ListContainer: 
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0",init amm
+2CqkQvYxp9Mq4PqLvAQ1eryYxebUh4Liyn5YMDtXsYci,3232897629084,2929353142826,0,1123200,1708988427,3600,10000,5000,init if
+3Qub3HaAJaa2xNY7SUqPKd3vVwTqDfDDkEUMPjXD2c1q,"{'last_oracle_price': 1672030, 'last_oracle_conf': 0, 'last_oracle_delay': 1, 'last_oracle_price_twap': 1675113, 'last_oracle_price_twap5min': 1672776, 'last_oracle_price_twap_ts': 1708989977}",-23755655579106,34756824672,"{'scaled_balance': 7691724856449, 'market_index': 0, 'padding': ListContainer([0, 0, 0, 0, 0, 0])}",220502357128439,435588772098970,1207100,187413818605087,273078877790952,309916683943452,846409,424565844907877,416022000000000,-410276000000000,5724863309762,21136690238,2000000000000000,26232767658,-651429080323,679141420675,-678895251277,700851981810,55605000000000,285416,285416,285416,189756,-4605289510,-22562324343,18453687436,37832669947,17071306751,7849107706,293597485,293529500,0,219335677990194,437905733652687,220941604851802,434722790444698,1672030,-1,1677972,1685750,1681861,1682949,250665406,703,-154000692,1708988584,3600,1000000000,100,1000000000,0,211934341211,5289761561,7353736743,1708989726,1211,3083,1708989923,5000,29500,10601,3975,646,0,100,50,100,200,OracleSource.Pyth(),True,0,4,0,0,131557329,0,0,0,"ListContainer: 
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0
+    0",init amm
+2CqkQvYxp9Mq4PqLvAQ1eryYxebUh4Liyn5YMDtXsYci,3232897629084,2929353142826,0,1123200,1708988427,3600,10000,5000,init if
