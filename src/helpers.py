@@ -1,46 +1,33 @@
 import asyncio
 import csv
-from dataclasses import asdict
 import time
 import base64
-from typing import Tuple
-from anchorpy import Wallet
 import jsonrpcclient
-from solana.rpc.async_api import AsyncClient
-from driftpy.drift_client import DriftClient
-from driftpy.account_subscription_config import AccountSubscriptionConfig
-from solders.keypair import Keypair # type: ignore
 import pathlib
-from subprocess import Popen
 import os
 import time
-import signal
+
+from dataclasses import asdict, dataclass
+from typing import Generic, Tuple, TypeVar
+
+from anchorpy import Wallet
+
+from solana.rpc.async_api import AsyncClient
+
+from solders.keypair import Keypair  # type: ignore
+
+from driftpy.drift_client import DriftClient
+from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.admin import Admin
 from driftpy.decode.user import decode_user
-import subprocess
+from driftpy.types import UserAccount
 
-class LocalValidator:
-    def __init__(self, script_file) -> None:
-        self.script_file = script_file
+T = TypeVar("T")
 
-    def start(self):
-        """
-        starts a new solana-test-validator by running the given script path
-        and logs the stdout/err to the logfile
-        """
-        self.log_file = open('node.txt', 'w')
-        self.proc = Popen(
-            f'bash {self.script_file}'.split(' '),
-            stdout=self.log_file,
-            stderr=self.log_file,
-            preexec_fn=os.setsid
-        )
-        time.sleep(5)
-
-    def stop(self):
-        self.log_file.close()
-        os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-
+@dataclass
+class DataAndSlot(Generic[T]):
+    slot: int
+    data: T
 
 async def load_local_users(
     _,
@@ -92,27 +79,12 @@ async def load_local_users(
 
     print(f"Loaded {len(chs) + 1} users.          ")
 
-    print('Confirming SOL airdrops...')
-    confirmed_count = 0  
-
-    for i, sig in enumerate(sigs):
-        command = ["solana", "confirm", f"{sig}"]
-        output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
-        if "0x1" not in output:
-            confirmed_count += 1  
-
-        print(f"Confirming airdrops: {confirmed_count}/{len(sigs)} confirmed", end='\r')
-
-    print(f"\nConfirmed {confirmed_count}/{len(sigs)} airdrops successfully.")
-
-
     return chs, admin_ch # type: ignore
-
 
 async def load_nonidle_users_for_market(
     admin: Admin,
     market_index: int,
-    keypairs_path='keypairs/',
+    keypairs_path="keypairs/",
 ):
     start = time.time()
     filters = [{"memcmp": {"offset": 0, "bytes": "TfwwBiNJtao"}}]
@@ -136,7 +108,9 @@ async def load_nonidle_users_for_market(
 
     parsed_resp = jsonrpcclient.parse(resp.json())
 
-    rpc_response_values = parsed_resp.result["value"] # type: ignore
+    slot = int(parsed_resp.result["context"]["slot"])  # type: ignore
+
+    rpc_response_values = parsed_resp.result["value"]  # type: ignore
 
     agents: list[DriftClient] = []
     tasks = []
@@ -145,34 +119,30 @@ async def load_nonidle_users_for_market(
     counter = 0
     await admin.account_subscriber.update_cache()
     perp_market = admin.get_perp_market_account(market_index)
-    # print(perp_market.__dict__) # type: ignore
-    lp_shares = perp_market.amm.user_lp_shares # type: ignore
     users_with_lp_shares = 0
     running_lp_shares = 0
     print(f"Total users: {len(rpc_response_values)}")
     for i, program_account in enumerate(rpc_response_values):
-        print(f"Processing user {i} for market {market_index}", end='\r')
-        user = decode_user(
+        print(f"Processing user {i} for market {market_index}", end="\r")
+        user: UserAccount = decode_user(
             base64.b64decode(program_account["account"]["data"][0])
         )
         for perp_position in user.perp_positions:
             if perp_position.market_index == market_index:
-                # print(f"User {i} has position on market {market_index}: {perp_position.market_index}")
-                # print(f"Total users in market: {counter + 1}")
-                # assert user.user
                 running_lp_shares += perp_position.lp_shares
                 if perp_position.lp_shares > 0:
                     users_with_lp_shares += 1
                 counter += 1
-                secret_file_path = pathlib.Path(keypairs_path) / f"{str(user.authority)}.secret"
-                
-                with open(secret_file_path, 'r') as f:
+                secret_file_path = (
+                    pathlib.Path(keypairs_path) / f"{str(user.authority)}.secret"
+                )
+
+                with open(secret_file_path, "r") as f:
                     kp = Keypair.from_seed(bytes.fromhex(f.read()))
 
-                task = asyncio.create_task(admin.connection.request_airdrop(
-                    kp.pubkey(),
-                    int(1 * 1e9)
-                ))
+                task = asyncio.create_task(
+                    admin.connection.request_airdrop(kp.pubkey(), int(1 * 1e9))
+                )
                 tasks.append(task)
 
                 wallet = Wallet(kp)
@@ -181,7 +151,8 @@ async def load_nonidle_users_for_market(
                     admin.connection,
                     wallet,
                     "mainnet",
-                    account_subscription=AccountSubscriptionConfig("cached")
+                    account_subscription=AccountSubscriptionConfig("cached"),
+                    initial_user_data=DataAndSlot(slot, user),
                 )
 
                 agents.append(agent)
@@ -189,48 +160,25 @@ async def load_nonidle_users_for_market(
     print(f"total users with lp shares: {users_with_lp_shares}")
     print(f"total identified lp shares: {running_lp_shares}")
     print(f"loaded {len(agents)} agents.          ")
-    # assert lp_shares == running_lp_shares, f"lp shares {lp_shares} dne {running_lp_shares}" # type: ignore
-    for agent in agents:
-        await agent.subscribe()
-        await agent.account_subscriber.update_cache()
-    # print(f"loaded {counter} agents.          ")
-
-    # confirmed_count = 0  
 
     asyncio.gather(*tasks)
-
-    # for i, sig in enumerate(sigs):
-    #     command = ["solana", "confirm", f"{sig}"]
-    #     output = subprocess.run(command, capture_output=True, text=True).stdout.strip()
-    #     if "0x1" not in output:
-    #         confirmed_count += 1  
-
-    #     print(f"Confirming airdrops: {confirmed_count}/{len(sigs)} confirmed", end='\r')
-
-    # print(f"\nConfirmed {confirmed_count}/{len(sigs)} airdrops successfully.")
 
     print(f"Loaded {len(agents)} agents in {time.time() - start}s")
 
     return agents
 
+
 def append_to_csv(data_object, filename, record_type):
-    # Convert data object to dictionary
     data_dict = asdict(data_object)
-    data_dict['record_type'] = record_type  # Add a record type to distinguish the data
-    
-    # Determine if we need to write headers (only if the file is new)
+    data_dict["record_type"] = record_type  
+
     write_headers = not os.path.exists(filename) or os.path.getsize(filename) == 0
-    
-    # Open the file in append mode
-    with open(filename, 'a', newline='') as csvfile:
+
+    with open(filename, "a", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=data_dict.keys())
-        
+
         if write_headers:
             writer.writeheader()
         writer.writerow(data_dict)
-    
+
     print(f"{record_type} data appended to {filename} successfully.")
-
-
-                
-

@@ -11,7 +11,6 @@ note: need solana-cli v1.14.7 or greater for local validator's --account-dir fla
 (`sh -c "$(curl -sSfL https://release.solana.com/v1.14.7/install)"`)
 
 
-
 ## Quick Run (method 2)
 ```
 python3.10 -m venv venv
@@ -27,9 +26,10 @@ in the original terminal, run bash run.sh
 1. run `poetry shell`
 2. run `poetry install`
 3. run `python clone.py` to clone mainnet state (clone.py:495 determines which market index to filter for)
-4. run `solana config set --url http://127.0.0.1:8899`
-5. run `bash start_local.sh` in a separate terminal to start the local validator
-6. once the local validator is started, run `python experiments.py` (make sure to change the market index on experiments.py:147 and experiments.py:74 to match the market index of the market you cloned users for)
+4. Copy the FsJ3A..so file into `accounts` (Pyth oracle program shared object file)
+5. run `solana config set --url http://127.0.0.1:8899`
+6. run `bash start_local.sh` in a separate terminal to start the local validator
+7. once the local validator is started, run `poetry run python -m src.experiments` (make sure to change the market index on experiments.py:147 and experiments.py:74 to match the market index of the market you cloned users for)
 
 ## Environment Variables
 

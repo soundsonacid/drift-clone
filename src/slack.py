@@ -107,17 +107,17 @@ class SimulationResultBuilder:
         self.start_slot = 0
         self.start_time = dt.datetime.now()
         self.commit_hash = os.environ.get("COMMIT")
-        self.settled_markets = [] # type: ignore
+        self.settled_markets = []  # type: ignore
         self.total_users = 0
-        self.settle_user_success = {} # type: ignore
-        self.settle_user_fail_reasons = {} # type: ignore
-        self.initial_perp_markets = [] # type: ignore
-        self.initial_spot_markets = [] # type: ignore
-        self.final_perp_markets = [] # type: ignore
-        self.final_spot_markets = [] # type: ignore
-        self.final_settle_results = {} # type: ignore
+        self.settle_user_success = {}  # type: ignore
+        self.settle_user_fail_reasons = {}  # type: ignore
+        self.initial_perp_markets = []  # type: ignore
+        self.initial_spot_markets = []  # type: ignore
+        self.final_perp_markets = []  # type: ignore
+        self.final_spot_markets = []  # type: ignore
+        self.final_settle_results = {}  # type: ignore
 
-        start_time_str = self.start_time.strftime('%Y-%m-%d %H:%M:%S UTC')
+        start_time_str = self.start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
         self.slack.send_message(
             f"Simulation run started at: {start_time_str}\n"
             f"Commit: `{self.commit_hash}`"
@@ -170,7 +170,10 @@ class SimulationResultBuilder:
         )
 
     def spot_market_to_tuple(
-        self, insurance_fund_balance: str, spot_vault_balance: str, market: SpotMarketAccount
+        self,
+        insurance_fund_balance: str,
+        spot_vault_balance: str,
+        market: SpotMarketAccount,
     ) -> SpotMarketTuple:
         precision = 10**market.decimals
 
@@ -204,7 +207,10 @@ class SimulationResultBuilder:
         self.initial_perp_markets.append(self.perp_market_to_tuple(market))
 
     def add_initial_spot_market(
-        self, insurance_fund_balance: str, spot_vault_balance: str, market: SpotMarketAccount
+        self,
+        insurance_fund_balance: str,
+        spot_vault_balance: str,
+        market: SpotMarketAccount,
     ):
         self.initial_spot_markets.append(
             self.spot_market_to_tuple(
@@ -216,7 +222,10 @@ class SimulationResultBuilder:
         self.final_perp_markets.append(self.perp_market_to_tuple(market))
 
     def add_final_spot_market(
-        self, insurance_fund_balance: str, spot_vault_balance: str, market: SpotMarketAccount
+        self,
+        insurance_fund_balance: str,
+        spot_vault_balance: str,
+        market: SpotMarketAccount,
     ):
         self.final_spot_markets.append(
             self.spot_market_to_tuple(
@@ -312,12 +321,12 @@ class SimulationResultBuilder:
         for market in self.final_perp_markets:
             total_market_money += market.fee_pool + market.pnl_pool
 
-        market: SpotMarketTuple # type: ignore
+        market: SpotMarketTuple  # type: ignore
         for market in self.final_spot_markets:
-            total_market_money += market.spot_fee_pool # type: ignore
+            total_market_money += market.spot_fee_pool  # type: ignore
 
         quote_spot: SpotMarketAccount = self.final_spot_markets[0]
-        total_market_money += quote_spot.revenue_pool # type: ignore
+        total_market_money += quote_spot.revenue_pool  # type: ignore
 
         msg += "USDC Spot Market \n"
         msg += "  USDC market money (sum(fee + pnl) + spot_revenue):"
@@ -331,7 +340,7 @@ class SimulationResultBuilder:
                 continue
             msg += f"Spot Market {i} Delta: \n"
             msg += "  delta = (deposit $ - revenue $): "
-            msg += f"{market.deposit_balance - market.revenue_pool} \n" # type: ignore
+            msg += f"{market.deposit_balance - market.revenue_pool} \n"  # type: ignore
 
         msg += "```\n"
         msgs.append(msg)

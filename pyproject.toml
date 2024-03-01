@@ -21,7 +21,7 @@ parsing = "^2.0.4"
 pythclient = "0.1.4"
 autopep8 = "2.0.2"
 flake8 = "6.0.0"
-driftpy = "^0.7.25"
+driftpy = { git = "https://github.com/soundsonacid/driftpy.git", branch = "sims-stuff" }
 
 
 [build-system]

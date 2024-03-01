@@ -18,10 +18,10 @@ from driftpy.setup.helpers import adjust_oracle_pretrade
 from anchorpy import Provider
 
 from termcolor import colored
-from solders.instruction import Instruction # type: ignore
+from solders.instruction import Instruction  # type: ignore
 
-from solana.rpc.core import RPCException # type: ignore
-import re # type: ignore
+from solana.rpc.core import RPCException  # type: ignore
+import re  # type: ignore
 
 
 @dataclass
@@ -70,9 +70,7 @@ class Event:
         return event.run(clearing_house)
 
     @staticmethod
-    def run_row_sdk(
-        class_type, clearing_house: DriftClient, event_row
-    ) -> DriftClient:
+    def run_row_sdk(class_type, clearing_house: DriftClient, event_row) -> DriftClient:
         event = Event.deserialize_from_row(class_type, event_row)
         return event.run_sdk(clearing_house)
 
@@ -82,6 +80,7 @@ class Event:
     # theres a lot of different inputs for this :/
     async def run_sdk(self, *args, **kwargs) -> DriftClient:
         raise NotImplementedError
+
 
 @dataclass
 class SettleLPEvent(Event):
@@ -104,7 +103,8 @@ class SettleLPEvent(Event):
         return await clearing_house.get_settle_lp_ix(
             clearing_house.authority, self.market_index
         )
-    
+
+
 @dataclass
 class SettlePnLEvent(Event):
     user_index: int
@@ -120,14 +120,14 @@ class SettlePnLEvent(Event):
         position = clearing_house.get_perp_position(self.market_index)
         if position is None or position.base_asset_amount == 0:
             return None
-        
+
         user_account = clearing_house.get_user_account()
 
         return await clearing_house.get_settle_pnl_ix(
             clearing_house.authority, user_account, self.market_index
         )
 
-    
+
 @dataclass
 class ClosePositionEvent(Event):
     user_index: int
@@ -171,11 +171,10 @@ class ClosePositionEvent(Event):
         if adjust_oracle_pre_trade:
             assert oracle_program is not None
             await adjust_oracle_pretrade(
-                position.base_asset_amount, direction, market, oracle_program # type: ignore
+                position.base_asset_amount, direction, market, oracle_program  # type: ignore
             )
 
         return await clearing_house.get_close_position_ix(self.market_index)
-
 
 
 async def _send_ix(
@@ -189,7 +188,7 @@ async def _send_ix(
 ):
     failed = 1  # 1 = fail, 0 = success
     provider: Provider = ch.program.provider
-    slot = (await provider.connection.get_slot()).value 
+    slot = (await provider.connection.get_slot()).value
     compute_used = -1
     err = None
     sig = None
@@ -201,7 +200,7 @@ async def _send_ix(
             sig = await ch.send_ixs(ix)
         failed = 0
         if view_logs_flag:
-            logs = await view_logs(sig, provider, False) # type: ignore
+            logs = await view_logs(sig, provider, False)  # type: ignore
 
     except RPCException as e:
         err = e.args
@@ -221,7 +220,7 @@ async def _send_ix(
             for log in logs:
                 if "compute units" in log:
                     result = re.search(r".* consumed (\d+) of (\d+)", log)
-                    compute_used = result.group(1) # type: ignore
+                    compute_used = result.group(1)  # type: ignore
         except Exception as e:
             pprint.pprint(e)
 

@@ -3,11 +3,12 @@ import jsonrpcclient
 import requests
 import json
 from solana.rpc.async_api import AsyncClient
-from solders.pubkey import Pubkey # type: ignore
-from solders.keypair import Keypair # type: ignore
-from solders.instruction import Instruction # type: ignore
+from solders.pubkey import Pubkey  # type: ignore
+from solders.keypair import Keypair  # type: ignore
+from solders.instruction import Instruction  # type: ignore
 import sys
-sys.path.append('driftpy/src/')
+
+sys.path.append("driftpy/src/")
 
 from driftpy.constants.config import configs
 from driftpy.drift_client import DriftClient
@@ -32,7 +33,7 @@ from anchorpy.coder.accounts import (
 from anchorpy.program.common import NamedInstruction
 
 import pathlib
-from tqdm import tqdm # type: ignore
+from tqdm import tqdm  # type: ignore
 import shutil
 import base64
 import os
@@ -49,21 +50,14 @@ from typing import List, Optional
 load_dotenv()
 
 
-accounts_dir = pathlib.Path('accounts/')
-keypairs_dir = pathlib.Path('keypairs/')
+accounts_dir = pathlib.Path("accounts/")
+keypairs_dir = pathlib.Path("keypairs/")
 
 
-def save_account_info(
-    path: pathlib.Path,
-    account_info,
-    pubkey: Pubkey
-):
-    pubkey = str(pubkey) # type: ignore
-    local_account = {
-        'account': account_info,
-        'pubkey': pubkey
-    }
-    with open(path, 'w') as f:
+def save_account_info(path: pathlib.Path, account_info, pubkey: Pubkey):
+    pubkey = str(pubkey)  # type: ignore
+    local_account = {"account": account_info, "pubkey": pubkey}
+    with open(path, "w") as f:
         json.dump(local_account, f)
 
 
@@ -72,10 +66,7 @@ def get_multiple_accounts_request(accounts):
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getMultipleAccounts",
-        "params": [
-            accounts,
-            {"encoding": "base64"}
-        ]
+        "params": [accounts, {"encoding": "base64"}],
     }
 
 
@@ -89,8 +80,8 @@ def get_program_accounts_request(program_id):
             {
                 "encoding": "base64",
                 "withContext": True,
-            }
-        ]
+            },
+        ],
     }
 
 
@@ -105,27 +96,23 @@ def does_discriminator_match(discriminator: bytes, base64_data: str) -> bool:
 
 
 async def get_accounts_from_batch_account_infos(
-    ch: DriftClient,
-    account_type: str,
-    addrs: list[str], account_infos: list[dict]) -> \
-        list[tuple[list[str], list[dict]]]:
+    ch: DriftClient, account_type: str, addrs: list[str], account_infos: list[dict]
+) -> list[tuple[list[str], list[dict]]]:
     """Compute the discriminator for the account type, and filter for all
     accounts that match the discriminator.
     """
     matches = []
     discriminator = get_discriminator_for_account_type(ch, account_type)
     for addr, account_info in zip(addrs, account_infos):
-        if does_discriminator_match(discriminator, account_info['data'][0]):
+        if does_discriminator_match(discriminator, account_info["data"][0]):
             matches.append((addr, account_info))
 
-    return matches # type: ignore
+    return matches  # type: ignore
 
 
 async def batch_get_account_infos_with_gpa_gma(
-        connection: AsyncClient,
-        program_id: str,
-        additional_accounts:
-        Optional[List[str]]) -> tuple[list[str], list[dict]]:
+    connection: AsyncClient, program_id: str, additional_accounts: Optional[List[str]]
+) -> tuple[list[str], list[dict]]:
     """Use getProgramAccounts to get all accounts from program_id, and
     getMultipleAccounts to get all accounts from additional_accounts.
     """
@@ -137,7 +124,7 @@ async def batch_get_account_infos_with_gpa_gma(
     resp = requests.post(
         connection._provider.endpoint_uri,
         headers={"Content-Type": "application/json"},
-        json=batch_reqs
+        json=batch_reqs,
     )
 
     try:
@@ -152,25 +139,29 @@ async def batch_get_account_infos_with_gpa_gma(
     slots = []
     idx_gma = 0
     for batch_resp in resp:
-        batch_resp = batch_resp['result']
-        assert len(batch_resp['value']) > 0, "no accounts found"
-        slots.append(batch_resp['context']['slot'])
-        for account_info in batch_resp['value']:
-            if 'account' in account_info:
+        batch_resp = batch_resp["result"] # type: ignore
+        assert len(batch_resp["value"]) > 0, "no accounts found" # type: ignore
+        slots.append(batch_resp["context"]["slot"]) # type: ignore
+        for account_info in batch_resp["value"]: # type: ignore
+            if "account" in account_info:
                 # getPrgoramAccounts resp
-                account_infos.append(account_info['account'])
-                pubkeys.append(account_info['pubkey'])
+                account_infos.append(account_info["account"])
+                pubkeys.append(account_info["pubkey"])
             else:
                 # getMultipleAccounts resp
                 account_infos.append(account_info)
-                pubkeys.append(additional_accounts[idx_gma])
+                pubkeys.append(additional_accounts[idx_gma]) # type: ignore
                 idx_gma += 1
 
     min_slot = min(slots)
-    print(f'getProgramAccounts slot:  {slots[0]} '
-          f'(delta from min: {slots[0] - min_slot})')
-    print(f'getMultipleAccounts slot: {slots[1]} '
-          f'(delta from min: {slots[1] - min_slot})')
+    print(
+        f"getProgramAccounts slot:  {slots[0]} "
+        f"(delta from min: {slots[0] - min_slot})"
+    )
+    print(
+        f"getMultipleAccounts slot: {slots[1]} "
+        f"(delta from min: {slots[1] - min_slot})"
+    )
 
     return (pubkeys, account_infos)
 
@@ -184,11 +175,11 @@ async def batch_get_account_infos(
     is_same_slot = True
     account_infos = []
 
-    _resp = []
+    _resp = [] # type: ignore
     for i in tqdm(range(0, len(addresses), batch_size)):
         rpc_requests = []
-        for j in range(i, i+batch_size, 100):
-            batch_addresses = addresses[j: j+100]
+        for j in range(i, i + batch_size, 100):
+            batch_addresses = addresses[j : j + 100]
             data = get_multiple_accounts_request(
                 [str(addr) for addr in batch_addresses]
             )
@@ -197,7 +188,7 @@ async def batch_get_account_infos(
         resp = requests.post(
             connection._provider.endpoint_uri,
             headers={"Content-Type": "application/json"},
-            json=rpc_requests
+            json=rpc_requests,
         )
 
         try:
@@ -208,17 +199,17 @@ async def batch_get_account_infos(
         _resp += resp
 
     for batch_account_infos in _resp:
-        batch_account_infos = batch_account_infos['result']
-        slot = batch_account_infos['context']['slot']
+        batch_account_infos = batch_account_infos["result"]
+        slot = batch_account_infos["context"]["slot"]
         if _slot is None:
             _slot = slot
         elif slot != _slot:
-            print('found different slots (difference):', abs(slot - _slot))
+            print("found different slots (difference):", abs(slot - _slot))
             if abs(slot - _slot) > 3:
                 return [], False
             else:
-                print('acceptable slot delta...')
-        account_infos += batch_account_infos['value']
+                print("acceptable slot delta...")
+        account_infos += batch_account_infos["value"]
 
     assert len(account_infos) == len(addresses)
 
@@ -233,49 +224,42 @@ async def get_oracle_addrs(ch: DriftClient) -> list[str]:
     perp_accounts = await ch.program.account["PerpMarket"].all()
     spot_accounts = await ch.program.account["SpotMarket"].all()
 
-    print(f'{len(perp_accounts)} perp accounts')
-    print(f'{len(spot_accounts)} spot accounts')
+    print(f"{len(perp_accounts)} perp accounts")
+    print(f"{len(spot_accounts)} spot accounts")
 
     oracle_addrs = []
-    [oracle_addrs.append(a.account.amm.oracle) for a in perp_accounts] # type: ignore
-    [oracle_addrs.append(a.account.oracle) for a in spot_accounts] # type: ignore
+    [oracle_addrs.append(a.account.amm.oracle) for a in perp_accounts]  # type: ignore
+    [oracle_addrs.append(a.account.oracle) for a in spot_accounts]  # type: ignore
     return oracle_addrs
 
 
 def decode_b64_data_to_account(ch, account_type, data):
-    """Decode an account from a base64 string into the specified account_type
-    """
+    """Decode an account from a base64 string into the specified account_type"""
     data = base64.b64decode(data)
     account = ch.program.account[account_type]._coder.accounts.parse(data).data
     return account
 
 
 def encode_account_to_b64_data(ch, type, account):
-    """Encode a DriftClient owned account into a base64 string
-    """
+    """Encode a DriftClient owned account into a base64 string"""
     anchor_data = NamedInstruction(data=account, name=type)
     try:
         data = ch.program.account[type]._coder.accounts.build(anchor_data)
         data = base64.b64encode(data).decode("utf-8")
     except:
         print(account)
-        panic()
     return data
 
 
-def setup_validator_script(
-    ch: DriftClient,
-    validator_path: str,
-    script_file: str
-):
+def setup_validator_script(ch: DriftClient, validator_path: str, script_file: str):
     # load accounts
-    
+
     validator_str = f"#!/bin/bash\n{validator_path}"
     # for d in accounts_dir.iterdir():
     #     if '.so' not in str(d):
     #         validator_str += f' --account-dir {d}'
 
-    validator_str += ' --account-dir accounts/'
+    validator_str += " --account-dir accounts/"
 
     # load program
     # https://github.com/drift-labs/protocol-v2/blob/master/sdk/src/config.ts
@@ -283,23 +267,23 @@ def setup_validator_script(
     program_path = f"{accounts_dir}/{program_address}.so"
     # d = devnet
     # m = mainnet
-    print('scraping mainnet program...')
+    print("scraping mainnet program...")
     command = f"solana program dump -u m {program_address} {program_path}"
     os.system(command)
 
     # program_path = f"driftpy/protocol-v2/target/deploy/clearing_house.so"
-    validator_str += f' --bpf-program {program_address} {program_path}'
+    validator_str += f" --bpf-program {program_address} {program_path}"
 
     # hard reset
-    validator_str += ' --reset'
+    validator_str += " --reset"
 
-    with open(script_file, 'w') as f:
+    with open(script_file, "w") as f:
         f.write(validator_str)
 
 
 async def scrape():
     start = time.time()
-    config = configs['mainnet']
+    config = configs["mainnet"]
     if "RPC_URL" in os.environ:
         url = os.getenv("RPC_URL")
     elif "API_KEY" in os.environ:
@@ -311,39 +295,35 @@ async def scrape():
     wallet = Wallet(state_kp)
     connection = AsyncClient(url)
     provider = Provider(connection, wallet)
-    ch = DriftClient(
-        connection,
-        wallet,
-        "mainnet"
-    )
-    print('reading from program:', ch.program_id)
+    ch = DriftClient(connection, wallet, "mainnet")
+    print("reading from program:", ch.program_id)
 
     state = await get_state_account(ch.program)
     _, n_spots = state.number_of_markets, state.number_of_spot_markets
 
     if accounts_dir.exists():
-        print('removing existing accounts...')
+        print("removing existing accounts...")
         shutil.rmtree(accounts_dir)
 
     if keypairs_dir.exists():
-        print('removing existing keypairs...')
+        print("removing existing keypairs...")
         shutil.rmtree(keypairs_dir)
 
     accounts_dir.mkdir(parents=True, exist_ok=True)
     keypairs_dir.mkdir(parents=True, exist_ok=True)
 
-    print('scraping...')
+    print("scraping...")
     types = []
     indexs = []
     addrs = []
     all_account_types = ch.program.account.keys()
-    print(f'all_account_types: {all_account_types}')
+    print(f"all_account_types: {all_account_types}")
 
     additional_addrs = []
 
     # include oracles
     oracle_addrs = await get_oracle_addrs(ch)
-    print(f'found {len(oracle_addrs)} oracle addrs...')
+    print(f"found {len(oracle_addrs)} oracle addrs...")
     print(oracle_addrs)
     addrs += oracle_addrs
     additional_addrs += oracle_addrs
@@ -352,7 +332,7 @@ async def scrape():
     for i in range(n_spots):
         vault_pk = get_spot_market_vault_public_key(ch.program_id, i)
         if_pk = get_insurance_fund_vault_public_key(ch.program_id, i)
-        print(f'Vaults for spot market {i}: {vault_pk}, {if_pk}')
+        print(f"Vaults for spot market {i}: {vault_pk}, {if_pk}")
         addrs.append(vault_pk)
         addrs.append(if_pk)
         additional_addrs.append(vault_pk)
@@ -363,14 +343,13 @@ async def scrape():
         additional_addrs.append(spot_market_account.mint)
 
     print(types)
-    print(f'found {len(indexs)} indexs...')
-    print(f'found {len(addrs)} accounts...')
-    print(f'found {len(additional_addrs)} additional addrs...')
+    print(f"found {len(indexs)} indexs...")
+    print(f"found {len(addrs)} accounts...")
+    print(f"found {len(additional_addrs)} additional addrs...")
 
     addrs, account_infos = await batch_get_account_infos_with_gpa_gma(
-        connection,
-        ch.program_id,
-        [str(a) for a in additional_addrs])
+        connection, ch.program_id, [str(a) for a in additional_addrs]
+    )
 
     # pop off the vault addrs + save (these are getMultipleAccounts responses)
     spot_count = 0
@@ -380,29 +359,25 @@ async def scrape():
         acc_info = account_infos.pop(-1)
         pop_count += 1
 
-        print('cloning mint', addr)
+        print("cloning mint", addr)
         # allow state_kp to mint more
         # this is wSOL so we cant mint from it -- we care about usdc
         if spot_count != 0:
             # from spl.token._layouts import MINT_LAYOUT
-            byte_data = base64.b64decode(acc_info['data'][0])
+            byte_data = base64.b64decode(acc_info["data"][0])
             byte_data = bytearray(byte_data)
 
             # set mint authority option = True (32bits = 8 bytes)
-            one = int.to_bytes(1, 4, 'little')
+            one = int.to_bytes(1, 4, "little")
             byte_data[:4] = one
             # set mint authority = state_ch
-            byte_data[4:4+32] = bytes(state_kp.pubkey())
+            byte_data[4 : 4 + 32] = bytes(state_kp.pubkey())
 
             # repack
-            data = base64.b64encode(byte_data).decode('utf-8')
-            acc_info['data'][0] = data
+            data = base64.b64encode(byte_data).decode("utf-8")
+            acc_info["data"][0] = data
 
-        save_account_info(
-            accounts_dir/(str(addr) + '.json'),
-            acc_info,
-            str(addr)
-        )
+        save_account_info(accounts_dir / (str(addr) + ".json"), acc_info, str(addr))
         spot_count += 1
 
         # 3 accounts per spot market: spot vault, IF vault
@@ -410,11 +385,7 @@ async def scrape():
             addr = addrs.pop(-1)
             acc_info = account_infos.pop(-1)
             pop_count += 1
-            save_account_info(
-                accounts_dir/(str(addr) + '.json'),
-                acc_info,
-                str(addr)
-            )
+            save_account_info(accounts_dir / (str(addr) + ".json"), acc_info, str(addr))
     print(f"popped {pop_count} token accounts for spot markets")
 
     # pop off and save oracles (these are getMultipleAccounts responses)
@@ -425,13 +396,10 @@ async def scrape():
         pop_count += 1
 
         assert str(oracle_addrs[i]) == str(
-            addr), f'oracle addr mismatch: {oracle_addrs[i]} != {addr}'
+            addr
+        ), f"oracle addr mismatch: {oracle_addrs[i]} != {addr}"
 
-        save_account_info(
-            accounts_dir/(str(addr) + '.json'),
-            acc_info,
-            str(addr)
-        )
+        save_account_info(accounts_dir / (str(addr) + ".json"), acc_info, str(addr))
 
     print("editing and saving accounts...")
     type_accounts = {}
@@ -444,55 +412,58 @@ async def scrape():
 
     for account_type in all_account_types:
         account_matches = await get_accounts_from_batch_account_infos(
-            ch,
-            account_type,
-            addrs,
-            account_infos)
+            ch, account_type, addrs, account_infos
+        )
 
         state_path = init_account_dir(account_type)
         print(
-            f'for account type: {account_type} '
-            f'(do nothing: {account_type in do_nothing_types}) '
-            f'found {len(account_matches)} accounts, '
-            f'saving to {state_path}...'
+            f"for account type: {account_type} "
+            f"(do nothing: {account_type in do_nothing_types}) "
+            f"found {len(account_matches)} accounts, "
+            f"saving to {state_path}..."
         )
 
-        if account_type not in do_nothing_types and \
-                account_type not in type_accounts:
+        if account_type not in do_nothing_types and account_type not in type_accounts:
             type_accounts[account_type] = []
 
         for ty_acc_addr, ty_acc_info in account_matches:
             if account_type in do_nothing_types:
-                '''
+                """
                 For ["SpotMarket", "PerpMarket", "Oracles", "SerumV3FulfillmentConfig"]
                 just save the account data
-                '''
+                """
                 save_account_info(
-                    state_path/(str(ty_acc_addr) + '.json'),
+                    state_path / (str(ty_acc_addr) + ".json"),
                     ty_acc_info,
-                    str(ty_acc_addr)
+                    str(ty_acc_addr),
                 )
-            elif account_type in ["InsuranceFundStake", "State", "PhoenixV1FullfillmenConfig", "ReferrerName"]:
-                '''
+            elif account_type in [
+                "InsuranceFundStake",
+                "State",
+                "PhoenixV1FullfillmenConfig",
+                "ReferrerName",
+            ]:
+                """
                 For ['InsuranceFundStake', 'State', 'User', 'UserStats', 'ReferrerName']
                 decode the data, and save it in type_accounts for further processing
-                '''
+                """
                 # for addr, enc_account in zip(addr_info, acc_info):
                 # if account_type == "User":
                 #     data = ty_acc_info['data'][0]
-                    # ty_acc_info['decoded_data'] = decode_user(base64.b64decode(data))
+                # ty_acc_info['decoded_data'] = decode_user(base64.b64decode(data))
                 #     ty_acc_info['addr'] = ty_acc_addr
 
                 #     type_accounts[account_type].append(ty_acc_info)
                 # else:
-                data = ty_acc_info['data'][0]
-                ty_acc_info['decoded_data'] = decode_b64_data_to_account(
-                    ch, account_type, data)
-                ty_acc_info['addr'] = ty_acc_addr
+                data = ty_acc_info["data"][0]
+                ty_acc_info["decoded_data"] = decode_b64_data_to_account(
+                    ch, account_type, data
+                )
+                ty_acc_info["addr"] = ty_acc_addr
 
                 type_accounts[account_type].append(ty_acc_info)
             elif account_type == "User":
-                data = ty_acc_info['data'][0]
+                data = ty_acc_info["data"][0]
                 user = decode_user(base64.b64decode(data))
                 for perp_position in user.perp_positions:
                     if perp_position.market_index == 9:
@@ -512,22 +483,18 @@ async def scrape():
     assert len(accounts) == 1
     print(f"Modifying State accounts: {len(accounts)}...")
     for account_dict in accounts:
-        obj = account_dict.pop('decoded_data')
-        addr: Pubkey = account_dict.pop('addr')
+        obj = account_dict.pop("decoded_data")
+        addr: Pubkey = account_dict.pop("addr")
 
         # update admin key of the state account
         print(f"Updating State admin key from {obj.admin} to {state_kp.pubkey()}...")
         obj.admin = state_kp.pubkey()
-        with open(keypairs_dir/'1.secret', 'w') as f:
+        with open(keypairs_dir / "1.secret", "w") as f:
             f.write(state_kp.secret().hex())
 
-        account_dict['data'][0] = encode_account_to_b64_data(ch, "State", obj)
-        print(f'saving {account_type} {len(accounts)} types to {state_path}...')
-        save_account_info(
-            state_path/(str(addr) + '.json'),
-            account_dict,
-            str(addr)
-        )
+        account_dict["data"][0] = encode_account_to_b64_data(ch, "State", obj)
+        print(f"saving {account_type} {len(accounts)} types to {state_path}...")
+        save_account_info(state_path / (str(addr) + ".json"), account_dict, str(addr))
 
     user_type = "User"
     user_stats_type = "UserStats"
@@ -551,7 +518,7 @@ async def scrape():
             if old_auth not in auths_to_kps:
                 new_auth_kp = Keypair()
                 auths_to_kps[old_auth] = new_auth_kp
-                with open(keypairs_dir/f'{new_auth_kp.pubkey()}.secret', 'w') as f:
+                with open(keypairs_dir / f"{new_auth_kp.pubkey()}.secret", "w") as f:
                     f.write(new_auth_kp.secret().hex())
                 new_auth = new_auth_kp.pubkey()
             else:
@@ -560,9 +527,9 @@ async def scrape():
             new_raw_account = account_bytes[:8] + bytes(new_auth) + account_bytes[40:]
             if ty == user_type:
                 n_users += 1
-                auths_to_subacc[old_auth] = auths_to_subacc.get(
-                    old_auth, []
-                ) + [new_auth]
+                auths_to_subacc[old_auth] = auths_to_subacc.get(old_auth, []) + [
+                    new_auth
+                ]
                 new_addr = get_user_account_public_key(
                     ch.program_id,
                     new_auth,
@@ -570,60 +537,16 @@ async def scrape():
             elif ty == user_stats_type:
                 n_users_stats += 1
                 new_addr = get_user_stats_account_public_key(
-                        ch.program_id,
-                        new_auth,
-                    )
+                    ch.program_id,
+                    new_auth,
+                )
             else:
                 raise Exception(f"Unknown type {ty}")
-            
-            account_dict['data'][0] = base64.b64encode(new_raw_account).decode('utf-8')
+
+            account_dict["data"][0] = base64.b64encode(new_raw_account).decode("utf-8")
             save_account_info(
-                save_path/(str(new_addr) + '.json'),
-                account_dict,
-                str(new_addr)
+                save_path / (str(new_addr) + ".json"), account_dict, str(new_addr)
             )
-    #     accounts = type_accounts[ty]
-    #     save_path = user_path if ty == user_type else user_stats_path
-    #     print(f"Modifying {ty} accounts: {len(accounts)}...")
-        # for account_dict in accounts:
-        #     obj = account_dict.pop('decoded_data')
-        #     addr: Pubkey = account_dict.pop('addr')
-        #     old_auth = str(obj.authority)
-        #     if old_auth not in auths_to_kps:
-        #         new_auth = Keypair()
-        #         auths_to_kps[old_auth] = new_auth
-        #         with open(keypairs_dir/f'{new_auth.pubkey()}.secret', 'w') as f:
-        #             f.write(new_auth.secret().hex())
-        #     else:
-        #         new_auth = auths_to_kps[old_auth]
-        #     # save objects with new authorities
-        #     obj.authority = new_auth.pubkey()
-
-    #     #     if ty == user_type:
-    #     #         n_users += 1
-    #     #         auths_to_subacc[old_auth] = auths_to_subacc.get(
-    #     #             old_auth, []
-    #     #         ) + [obj.sub_account_id]
-    #     #         new_addr = get_user_account_public_key(
-    #     #             ch.program_id,
-    #     #             new_auth.pubkey(),
-    #     #             obj.sub_account_id
-    #     #         )
-    #     #     elif ty == user_stats_type:
-    #     #         n_users_stats += 1
-    #     #         new_addr = get_user_stats_account_public_key(
-    #     #             ch.program_id,
-    #     #             new_auth.pubkey(),
-    #     #         )
-    #     #     else:
-    #     #         raise Exception(f"Unknown type {ty}")
-
-    #         account_dict['data'][0] = encode_account_to_b64_data(ch, ty, obj)
-    #         save_account_info(
-    #             save_path/(str(new_addr) + '.json'),
-    #             account_dict,
-    #             str(new_addr)
-    #         )
 
     # same thing with insurance fund
     ty = "InsuranceFundStake"
@@ -631,8 +554,8 @@ async def scrape():
     accounts = type_accounts[ty]
     print(f"Modifying {ty} accounts: {len(accounts)}...")
     for account_dict in accounts:
-        obj: InsuranceFundStakeAccount = account_dict.pop('decoded_data')
-        addr: Pubkey = account_dict.pop('addr')
+        obj: InsuranceFundStakeAccount = account_dict.pop("decoded_data")
+        addr: Pubkey = account_dict.pop("addr")
         old_auth = str(obj.authority)
         assert old_auth in auths_to_kps, f"old_auth {old_auth} not in auths_to_kps"
         new_auth: Keypair = auths_to_kps[old_auth]
@@ -642,30 +565,25 @@ async def scrape():
             ch.program_id, new_auth.pubkey(), obj.market_index
         )
 
-        account_dict['data'][0] = encode_account_to_b64_data(ch, ty, obj)
+        account_dict["data"][0] = encode_account_to_b64_data(ch, ty, obj)
         save_account_info(
-            if_path/(str(new_addr) + '.json'),
-            account_dict,
-            str(new_addr)
+            if_path / (str(new_addr) + ".json"), account_dict, str(new_addr)
         )
 
-    # alt = (await connection.get_account_info(Pubkey.from_string("D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c"))).value
-    query =   {
+    query = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getAccountInfo",
         "params": [
-        "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c",
-        {
-            "encoding": "base64"
-        }
-        ]
+            "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c",
+            {"encoding": "base64"},
+        ],
     }
 
     resp = requests.post(
         connection._provider.endpoint_uri,
         headers={"Content-Type": "application/json"},
-        json=query
+        json=query,
     )
 
     try:
@@ -673,26 +591,24 @@ async def scrape():
     except Exception as e:
         print(resp.text)
         raise e
-    
+
     path = init_account_dir("alt")
     save_account_info(
-        path/"D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c.json",
-        resp['result']['value'],
-        "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c"
+        path / "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c.json",
+        resp["result"]["value"],
+        "D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c",
     )
 
-    print('setting up validator scripts...')
-    validator_path = 'solana-test-validator'
-    script_file = 'start_local.sh'
-    setup_validator_script(
-        ch,
-        validator_path,
-        script_file
-    )
+    print("setting up validator scripts...")
+    validator_path = "solana-test-validator"
+    script_file = "start_local.sh"
+    setup_validator_script(ch, validator_path, script_file)
 
-    print(f'bash {script_file} to start the local validator...')
-    print(f'done in {time.time() - start}s :)')
+    print(f"bash {script_file} to start the local validator...")
+    print(f"done in {time.time() - start}s :)")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import asyncio
+
     asyncio.run(scrape())
