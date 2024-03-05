@@ -148,8 +148,8 @@ class Simulator:
         lut = await get_address_lookup_table(admin.connection, Pubkey.from_string("D9cnvzswDikQDf53k4HpQ3KJ9y1Fv3HGGDFYMXnK5T6c"))  # type: ignore
         print(len(lut.addresses))
 
-        amm = admin.get_perp_market_account(market_index).amm  # type: ignore
-        append_to_csv(amm, "sim_results.csv", "init amm")
+        market = admin.get_perp_market_account(market_index)  # type: ignore
+        append_to_csv(market, "sim_results.csv", "init market")
 
         usdc_spot_market = admin.get_spot_market_account(0)  # type: ignore
         insurance_vault = usdc_spot_market.insurance_fund  # type: ignore
@@ -225,8 +225,8 @@ class Simulator:
         await asyncio.sleep(30)
         await admin.account_subscriber.update_cache()  # type: ignore
 
-        amm = admin.get_perp_market_account(market_index).amm  # type: ignore
-        append_to_csv(amm, "sim_results.csv", "final amm")
+        market = admin.get_perp_market_account(market_index)  # type: ignore
+        append_to_csv(market, "sim_results.csv", "final market")
 
         usdc_spot_market = admin.get_spot_market_account(0)  # type: ignore
         insurance_vault = usdc_spot_market.insurance_fund  # type: ignore
